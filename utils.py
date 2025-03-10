@@ -11,6 +11,8 @@ from skimage.io import imread
 from skimage.measure import label, regionprops
 from skimage.filters import threshold_otsu
 from skimage.transform import resize
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 
 # Constants
 DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -35,6 +37,10 @@ IN_PARAM = np.array([MAX_BINS, LEARN_RATE, MAX_ITER], dtype='float')
 SEED = RandomState(MT19937(SeedSequence(753)))
 
 
+### ------------------------------- UTILS ------------------------------- ###
+### --------------------------------------------------------------------- ###
+
+# Dataset functions
 def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
     """
     Create a dataset from images in directory "data" and save it as a pkl file.
@@ -52,6 +58,7 @@ def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
     data : dict
         Dictionary containing the dataset.
     """
+    
     # Ensure the pkl directory exists
     DATASET_PKL_DIR.mkdir(exist_ok=True)
     
@@ -99,13 +106,13 @@ def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
                 target_dir = MUTANT_DIR
                 prefix = "Mut"
                 counter = count_mutant
-                count_mutant = process_directory(subdir_path, target_dir, prefix, counter)
+                count_mutant = copy_and_rename_files(subdir_path, target_dir, prefix, counter)
                 
             elif subdir_name.startswith('WildType'):
                 target_dir = WT_DIR
                 prefix = "WT"
                 counter = count_wildtype
-                count_wildtype = process_directory(subdir_path, target_dir, prefix, counter)
+                count_wildtype = copy_and_rename_files(subdir_path, target_dir, prefix, counter)
         
         print(f"Images imported. Mutant files: {count_mutant}, WildType files: {count_wildtype}")
         
@@ -114,7 +121,7 @@ def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
             for file in directory.glob('*.tif'):
                 try:
                     im = imread(file)
-                    im = process_image(im)
+                    im = process_image_format(im)
                     
                     data["label"].append(label)
                     data["filename"].append(file.name)
@@ -129,8 +136,26 @@ def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
         
         return data
 
+def show_dataset_properties(data):
+    """
+    Display properties of the dataset.
+    
+    Parameters
+    ----------
+    data : dict
+        Dataset dictionary
+    """
+    print('Number of samples:', len(data['data']))
+    print('Keys:', list(data.keys()))
+    print('Description:', data['description'])
+    print('Image shape:', data['data'][0].shape if data['data'] else 'No data')
+    print('Labels:', np.unique(data['label']) if data['label'] else 'No labels')
+    print('Label counts:')
+    for label in np.unique(data['label']):
+        count = sum(1 for x in data['label'] if x == label)
+        print(f'  {label}: {count}')
 
-def process_directory(source_dir, target_dir, prefix, counter):
+def copy_and_rename_files(source_dir, target_dir, prefix, counter):
     """
     Process files in a directory by copying and renaming them.
     
@@ -158,10 +183,11 @@ def process_directory(source_dir, target_dir, prefix, counter):
             counter += 1
         except Exception as e:
             print(f"Error processing {file}: {e}")
-    return counter
+    return counter 
 
 
-def process_image(image):
+# Image functions
+def process_image_format(image):
     """
     Process an image to ensure consistent format and size.
     
@@ -185,27 +211,6 @@ def process_image(image):
         
     # Ensure consistent data type
     return image.astype(np.uint8)
-
-
-def show_dataset_properties(data):
-    """
-    Display properties of the dataset.
-    
-    Parameters
-    ----------
-    data : dict
-        Dataset dictionary
-    """
-    print('Number of samples:', len(data['data']))
-    print('Keys:', list(data.keys()))
-    print('Description:', data['description'])
-    print('Image shape:', data['data'][0].shape if data['data'] else 'No data')
-    print('Labels:', np.unique(data['label']) if data['label'] else 'No labels')
-    print('Label counts:')
-    for label in np.unique(data['label']):
-        count = sum(1 for x in data['label'] if x == label)
-        print(f'  {label}: {count}')
-
 
 def display_image(image, number=None, image_type=''):
     """
@@ -234,6 +239,41 @@ def display_image(image, number=None, image_type=''):
     plt.tight_layout()
     plt.show()
 
+def display_histogram(image, max_pixel, number=None, image_type=''):
+    """
+    Display a histogram of the image with matplotlib.
+    
+    Parameters
+    ----------
+    image : ndarray
+        Image to display
+    number : int or str, optional
+        Identifier for the image
+    image_type : str, optional
+        Type of the image (e.g., 'original', 'Frangi')
+    """
+    
+    if image.dtype != np.uint16:
+        print("Image is not in uint16 format.")
+    else:
+        plt.figure(figsize=(8, 8))
+        plt.hist(image.ravel(), bins=max_pixel, range=(0, max_pixel), density=True, color='black', alpha=0.75)
+        
+        title = "Histogram"
+        if number is not None:
+            title += f" {number}"
+        if image_type:
+            title += f" ({image_type})"
+        
+        plt.title(title)
+        plt.xlabel('Pixel intensity')
+        plt.ylabel('Frequency')
+        plt.tight_layout()
+        plt.show() 
+
+
+### --------------------------- PREPROCESSING --------------------------- ###
+### --------------------------------------------------------------------- ###
 
 def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
@@ -290,7 +330,10 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     return X_preprocessed
 
 
-def compute_pdnn(positions, bins):
+### ----------------------------- FEATURES ------------------------------ ###
+### --------------------------------------------------------------------- ###
+
+def first_neighbor_distance_histogram(positions, bins):
     """
     Compute the histogram of the distance to first neighbor of the centroids.
     
@@ -333,7 +376,6 @@ def compute_pdnn(positions, bins):
     if sum_histo > 0:
         return histo / sum_histo
     return histo
-
 
 def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
@@ -439,7 +481,7 @@ def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_fe
 
                 # Distance to nearest neighbor histogram
                 bins = np.linspace(start=3, stop=30, num=n_bins)
-                feat1 = compute_pdnn(np.array(centroids), bins)
+                feat1 = first_neighbor_distance_histogram(np.array(centroids), bins)
                 feat = np.append(feat, feat1 * (bins[1] - bins[0]))
 
             features['label'].append(y[im_num])
@@ -454,6 +496,9 @@ def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_fe
 
         return X_feat
 
+
+### ----------------------------- LEARNING ------------------------------ ###
+### --------------------------------------------------------------------- ###
 
 def train_model(X_features, y, seed=SEED, n_runs=N_RUNS, params=IN_PARAM):
     """
@@ -477,8 +522,6 @@ def train_model(X_features, y, seed=SEED, n_runs=N_RUNS, params=IN_PARAM):
     float
         Mean correct estimation
     """
-    from sklearn.model_selection import train_test_split
-    from sklearn.ensemble import RandomForestClassifier
     
     print("Training model...")
     
@@ -518,6 +561,8 @@ def train_model(X_features, y, seed=SEED, n_runs=N_RUNS, params=IN_PARAM):
     return mean_correct_estim
 
 
+
+
 if __name__ == "__main__":
     # Load dataset
     filename_pkl_dataset = 'dataset_2025-03-10_08-05-48'
@@ -537,6 +582,7 @@ if __name__ == "__main__":
     if len(X) > 0:
         sample_idx = min(50, len(X) - 1)
         display_image(X[sample_idx], sample_idx, 'original')
+        display_histogram(X[sample_idx], X[sample_idx].max(), sample_idx, 'original')
         display_image(X_preprocessed[sample_idx], sample_idx, 'Frangi')
     
     # Compute features
