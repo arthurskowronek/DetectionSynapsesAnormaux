@@ -136,25 +136,6 @@ def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
         
         return data
 
-def show_dataset_properties(data):
-    """
-    Display properties of the dataset.
-    
-    Parameters
-    ----------
-    data : dict
-        Dataset dictionary
-    """
-    print('Number of samples:', len(data['data']))
-    print('Keys:', list(data.keys()))
-    print('Description:', data['description'])
-    print('Image shape:', data['data'][0].shape if data['data'] else 'No data')
-    print('Labels:', np.unique(data['label']) if data['label'] else 'No labels')
-    print('Label counts:')
-    for label in np.unique(data['label']):
-        count = sum(1 for x in data['label'] if x == label)
-        print(f'  {label}: {count}')
-
 def copy_and_rename_files(source_dir, target_dir, prefix, counter):
     """
     Process files in a directory by copying and renaming them.
@@ -238,38 +219,6 @@ def display_image(image, number=None, image_type=''):
     plt.axis('off')
     plt.tight_layout()
     plt.show()
-
-def display_histogram(image, max_pixel, number=None, image_type=''):
-    """
-    Display a histogram of the image with matplotlib.
-    
-    Parameters
-    ----------
-    image : ndarray
-        Image to display
-    number : int or str, optional
-        Identifier for the image
-    image_type : str, optional
-        Type of the image (e.g., 'original', 'Frangi')
-    """
-    
-    if image.dtype != np.uint16:
-        print("Image is not in uint16 format.")
-    else:
-        plt.figure(figsize=(8, 8))
-        plt.hist(image.ravel(), bins=max_pixel, range=(0, max_pixel), density=True, color='black', alpha=0.75)
-        
-        title = "Histogram"
-        if number is not None:
-            title += f" {number}"
-        if image_type:
-            title += f" ({image_type})"
-        
-        plt.title(title)
-        plt.xlabel('Pixel intensity')
-        plt.ylabel('Frequency')
-        plt.tight_layout()
-        plt.show() 
 
 
 ### --------------------------- PREPROCESSING --------------------------- ###
@@ -400,6 +349,8 @@ def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_fe
     -------
     ndarray
         Feature vectors
+    dict
+        Features dictionary
     """
     DATASET_PKL_DIR.mkdir(exist_ok=True)
     features_file_name = f'{Path(pkl_name).stem}_features.pkl'
@@ -414,7 +365,7 @@ def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_fe
             for im_num, feat in enumerate(features['data']):
                 X_feat[im_num, :] = feat
                 
-            return X_feat
+            return X_feat, features
         except FileNotFoundError:
             print('Features file not found. Recomputing...')
             recompute = True
@@ -422,7 +373,7 @@ def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_fe
     if recompute:
         print('Computing features...')
         
-        X_feat = np.zeros((len(X), n_features * (n_bins - 1)))
+        X_feat = np.zeros((len(X), n_features * (n_bins - 1))) 
         features = {
             'description': 'C elegans images features from frangi blobs',
             'label': [],
@@ -494,7 +445,7 @@ def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_fe
         shutil.move(features_file_name, DATASET_PKL_DIR)
         print(f'Features computed and saved to {DATASET_PKL_DIR / features_file_name}')
 
-        return X_feat
+        return X_feat, features
 
 
 ### ----------------------------- LEARNING ------------------------------ ###
@@ -560,35 +511,3 @@ def train_model(X_features, y, seed=SEED, n_runs=N_RUNS, params=IN_PARAM):
     mean_correct_estim = np.mean(correct_estimations)
     return mean_correct_estim
 
-
-
-
-if __name__ == "__main__":
-    # Load dataset
-    filename_pkl_dataset = 'dataset_2025-03-10_08-05-48'
-    data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
-    
-    # Display dataset properties
-    show_dataset_properties(data)
-    
-    # Convert to numpy arrays
-    X = np.array(data['data'])
-    y = np.array(data['label'])
-    
-    # Preprocessing
-    X_preprocessed = preprocess_images(recompute=False, X=X, pkl_name=filename_pkl_dataset)
-    
-    # Display sample images
-    if len(X) > 0:
-        sample_idx = min(50, len(X) - 1)
-        display_image(X[sample_idx], sample_idx, 'original')
-        display_histogram(X[sample_idx], X[sample_idx].max(), sample_idx, 'original')
-        display_image(X_preprocessed[sample_idx], sample_idx, 'Frangi')
-    
-    # Compute features
-    X_features = create_feature_vector(X_preprocessed, y, recompute=False, pkl_name=filename_pkl_dataset)
-    
-    # Training
-    print('Training model...')
-    mean_corr_estim = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
-    print(f'Mean accuracy: {100*mean_corr_estim:.1f}%')
