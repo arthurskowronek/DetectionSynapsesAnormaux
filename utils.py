@@ -371,11 +371,11 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         # no filter
         X_preprocessed[im_num] = image
         
+        # ----- ADJUST CONTRAST -----
         #X_preprocessed[im_num] = exposure.adjust_gamma(X_preprocessed[im_num], gamma=1) 
         #X_preprocessed[im_num] = exposure.adjust_log(X_preprocessed[im_num], gain=0.8, inv=False) 
-        
-        
         #X_preprocessed[im_num] = ski.exposure.equalize_hist(X_preprocessed[im_num]) # not a good idea
+        
         
         # ----- TUBNESS FILTERS -----
         # Hessian filter
@@ -390,34 +390,20 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         #X_preprocessed[im_num] = ski.filters.multiscale_hessian(X_preprocessed[im_num], sigmas=range(1, 10, 2), scale_range=None, scale_step=None, alpha=0.5, beta=0.5, gamma=15, black_ridges=False)
         
         
-        
-        # canny edge detector
-        #X_preprocessed[im_num] = ski.feature.canny(X_preprocessed[im_num], sigma=2)
-
-        threshold_value = ski.filters.threshold_otsu(X_preprocessed[im_num])
-        #print(f"Threshold value: {threshold_value}") # =0.15
-        #max_value = np.max(X_preprocessed[im_num]) # =0.99
-        #print(f"Max pixel value: {max_value}")  
-        #threshold_value = 0.5 * max_value
-        #X_preprocessed[im_num] = X_preprocessed[im_num] > threshold_value
+        # ----- SKELETON ------
+        #skeleton = ski.morphology.skeletonize(X_preprocessed[im_num])
+        #X_preprocessed[im_num] = skeleton
         
         
-        
-    
-        
-        """# Create a temporary boolean array
-        temp_bool_img = X_preprocessed[im_num].astype(bool)
-        # Apply the function to the boolean array
-        temp_result = ski.morphology.remove_small_objects(temp_bool_img, min_size=5)
-        # Assign the result back
+        # ----- REMOVE SMALL OBJECTS -----
+        # OPTION 1
+        """bool_img = X_preprocessed[im_num].astype(bool)
+        temp_result = ski.morphology.remove_small_objects(bool_img, min_size=5)
         X_preprocessed[im_num] = temp_result"""
-        
-
-        """# Optionally, clean up small regions that are not synapses (e.g., intestines)
-        # Label connected components and remove small objects (intestines likely being smaller than synapses)
+        # OPTION 2
+        """# Label connected components and remove small objects (intestines likely being smaller than synapses)
         labeled_image = ski.measure.label(X_preprocessed[im_num]) 
         regions = ski.measure.regionprops(labeled_image)
-
         # Filter based on region properties (e.g., area) to keep only large regions (synapse chain)
         min_area = 50 # Set this based on the expected size of the synapse chain
         large_regions = np.zeros_like(labeled_image)
@@ -425,24 +411,16 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         for region in regions:
             if region.area > min_area:
                 large_regions[labeled_image == region.label] = 1       
-                    
         # The final processed image should only contain the chain-like synapse regions
-        X_preprocessed[im_num] = large_regions.astype(np.uint16)
+        X_preprocessed[im_num] = large_regions.astype(np.uint16)"""
         
+        
+        # ----- CLOSE GAP BETWEEN EDGES -----
         # Morphological operation: Dilation followed by Erosion to close the chain gaps
-        selem = ski.morphology.disk(3)  # Use a disk-shaped structuring element
+        """selem = ski.morphology.disk(3)  # Use a disk-shaped structuring element
         dilated = ski.morphology.dilation(X_preprocessed[im_num], selem)
         closed = ski.morphology.erosion(dilated, selem)
-        X_preprocessed[im_num] = closed
-        
-        #skeleton = ski.morphology.skeletonize(X_preprocessed[im_num])
-        #X_preprocessed[im_num] = skeleton"""
-        
-        
-        
-        
-        # Gaussian blur
-        #X_preprocessed[im_num] = ski.filters.gaussian(X_preprocessed[im_num], sigma=100) #image disparait, ecran tout noir
+        X_preprocessed[im_num] = closed"""
         
         
         # ----- EDGE DETECTION -----
@@ -461,6 +439,9 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         
         
         # ----- THRESHOLDING -----
+        # threshold otsu
+        #threshold_value = ski.filters.threshold_otsu(X_preprocessed[im_num])
+        #X_preprocessed[im_num] = X_preprocessed[im_num] > threshold_value
         # threshold local
         #X_preprocessed[im_num] = ski.filters.threshold_local(X_preprocessed[im_num], block_size=3)
         # threshold mean
