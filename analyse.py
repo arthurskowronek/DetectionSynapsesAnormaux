@@ -19,16 +19,47 @@ def show_dataset_properties(data):
     data : dict
         Dataset dictionary
     """
-    print('Number of samples:', len(data['data']))
-    print('Keys:', list(data.keys()))
-    print('Description:', data['description'])
-    print('Image shape:', data['data'][0].shape if data['data'] else 'No data')
-    print('Labels:', np.unique(data['label']) if data['label'] else 'No labels')
-    print('Label counts:')
+    print('')
+    print('------------------------------------------')
+    print('| Number of samples:', len(data['data']))
+    print('| Keys:', list(data.keys()))
+    print('| Description:', data['description'])
+    print('| Image shape:', data['data'][0].shape if data['data'] else 'No data')
+    print('| Labels:', np.unique(data['label']) if data['label'] else 'No labels')
+    print('| Label counts:')
     for label in np.unique(data['label']):
         count = sum(1 for x in data['label'] if x == label)
-        print(f'  {label}: {count}')
-
+        print(f'|   {label}: {count}')
+    print('------------------------------------------')
+    print('')
+ 
+def create_histogram(X):
+    """
+    Create histograms for each image in the dataset.
+    
+    Parameters
+    ----------
+    X : ndarray
+        Image dataset
+    
+    Returns
+    -------
+    ndarray
+        Histogram dataset
+    """
+    
+    # calculate maximum pixel value in X 
+    if np.issubdtype(X.dtype, np.integer):
+        max_pixel = np.max([np.max(image) for image in X])
+    else:
+        max_pixel = int(np.max(X)) + 1 # Add 1 to include the max pixel value as a bin.
+    
+    X_hist = np.zeros((len(X), max_pixel))
+    for im_num, image in enumerate(X):
+        hist, _ = np.histogram(image.flatten(), bins=max_pixel, range=(0, max_pixel))
+        X_hist[im_num] = hist
+    return X_hist
+        
 def display_histogram(image, max_pixel, number=None, image_type=''):
     """
     Display a histogram of the image with matplotlib.

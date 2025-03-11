@@ -2,11 +2,12 @@ import os
 import shutil
 import joblib
 import datetime
-from pathlib import Path
 import numpy as np
 from numpy.random import RandomState, MT19937, SeedSequence
 import matplotlib.pyplot as plt
+from pathlib import Path
 import skimage as ski
+from skimage import exposure
 from skimage.io import imread
 from skimage.measure import label, regionprops
 from skimage.filters import threshold_otsu
@@ -166,8 +167,6 @@ def copy_and_rename_files(source_dir, target_dir, prefix, counter):
             print(f"Error processing {file}: {e}")
     return counter 
 
-
-# Image functions
 def process_image_format(image):
     """
     Process an image to ensure consistent format and size.
@@ -191,8 +190,9 @@ def process_image_format(image):
         image = resize(image, IMAGE_SIZE, preserve_range=True)
         
     # Ensure consistent data type
-    return image.astype(np.uint8)
+    return image.astype(np.uint16)
 
+# Image functions
 def display_image(image, number=None, image_type=''):
     """
     Display an image with matplotlib.
@@ -220,6 +220,111 @@ def display_image(image, number=None, image_type=''):
     plt.tight_layout()
     plt.show()
 
+def display_2_images(image1, image2, title1="Image 1", title2="Image 2", cmap="gray"):
+    """
+    Displays two images side by side using matplotlib.
+
+    Parameters
+    ----------
+    image1 : ndarray
+        The first image to display.
+    image2 : ndarray
+        The second image to display.
+    title1 : str, optional
+        Title for the first image.
+    title2 : str, optional
+        Title for the second image.
+    cmap : str, optional
+        Colormap to use for displaying the images (e.g., 'gray', 'viridis').
+    """
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8))  # Create a figure with 1 row and 2 columns
+
+    axes[0].imshow(image1, cmap=cmap)
+    axes[0].set_title(title1)
+    axes[0].axis('off')
+
+    axes[1].imshow(image2, cmap=cmap)
+    axes[1].set_title(title2)
+    axes[1].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+def display_4_images(image1, image2, image3, image4, titles=None, cmap="gray"):
+    """
+    Displays 4 images in a 2x2 grid using matplotlib.
+
+    Parameters
+    ----------
+    image1 : ndarray
+        The first image to display.
+    image2 : ndarray
+        The second image to display.
+    image3 : ndarray
+        The third image to display.
+    image4 : ndarray
+        The fourth image to display.
+    titles : list of str, optional
+        A list of titles for each image. If None, default titles are used.
+    cmap : str, optional
+        Colormap to use for displaying the images (e.g., 'gray', 'viridis').
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(8, 8))  # 2 rows, 2 columns
+
+    images = [image1, image2, image3, image4]
+    if titles is None:
+        titles = [f"Image {i+1}" for i in range(4)] #Default titles if none are passed in.
+
+    for i, ax in enumerate(axes.flatten()): #Iterate through each subplot. flatten() makes it easier to iterate.
+
+        ax.imshow(images[i], cmap=cmap)
+        ax.set_title(titles[i])
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+    
+def display_6_images(image1, image2, image3, image4, image5, image6, titles=None, cmap="gray"):
+    """
+    Displays 6 images in a 2x3 grid using matplotlib.
+
+    Parameters
+    ----------
+    image1 : ndarray
+        The first image to display.
+    image2 : ndarray
+        The second image to display.
+    image3 : ndarray
+        The third image to display.
+    image4 : ndarray
+        The fourth image to display.
+    image5 : ndarray
+        The fifth image to display.
+    image6 : ndarray
+        The sixth image to display.
+    titles : list of str, optional
+        A list of titles for each image. If None, default titles are used.
+    cmap : str, optional
+        Colormap to use for displaying the images (e.g., 'gray', 'viridis').
+    """
+    fig, axes = plt.subplots(2, 3, figsize=(12, 8))
+    axes = axes.flatten()
+
+    images = [image1, image2, image3, image4, image5, image6]
+
+    for i, ax in enumerate(axes):
+        if i % 3 == 2:  # Histogram plot
+            ax.plot(images[i]) #plot the histogram as a lineplot
+            ax.set_title(titles[i])
+            ax.set_xlabel("Pixel Value")
+            ax.set_ylabel("Frequency")
+        else: #Image plot
+            ax.imshow(images[i], cmap=cmap)
+            ax.set_title(titles[i])
+
+    plt.tight_layout()
+    plt.show()
 
 ### --------------------------- PREPROCESSING --------------------------- ###
 ### --------------------------------------------------------------------- ###
@@ -258,17 +363,127 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     if recompute and X is None:
         raise ValueError("Input images (X) must be provided when recomputing preprocessing")
     
-    print('Preprocessing images with Frangi filter...')
+    print('Preprocessing images...')
     X_preprocessed = np.zeros_like(X, dtype=np.float64)
     
     for im_num, image in enumerate(X):
         print(f'Processing image {im_num+1}/{len(X)}')
-        X_preprocessed[im_num] = ski.filters.frangi(
-            image, 
-            black_ridges=False,
-            sigmas=range(1, 5, 1),
-            gamma=70
-        )
+        # no filter
+        X_preprocessed[im_num] = image
+        
+        #X_preprocessed[im_num] = exposure.adjust_gamma(X_preprocessed[im_num], gamma=1) 
+        #X_preprocessed[im_num] = exposure.adjust_log(X_preprocessed[im_num], gain=0.8, inv=False) 
+        
+        
+        #X_preprocessed[im_num] = ski.exposure.equalize_hist(X_preprocessed[im_num]) # not a good idea
+        
+        # Franji filter
+        X_preprocessed[im_num] = ski.filters.frangi(X_preprocessed[im_num],black_ridges=False,sigmas=range(1, 5, 1), gamma = 70) #alpha=2, beta=0.5, gamma=15)
+        
+        # canny edge detector
+        #X_preprocessed[im_num] = ski.feature.canny(X_preprocessed[im_num], sigma=2)
+
+        threshold_value = ski.filters.threshold_otsu(X_preprocessed[im_num])
+        #print(f"Threshold value: {threshold_value}") # =0.15
+        #max_value = np.max(X_preprocessed[im_num]) # =0.99
+        #print(f"Max pixel value: {max_value}")  
+        #threshold_value = 0.5 * max_value
+        X_preprocessed[im_num] = X_preprocessed[im_num] > threshold_value
+        
+        
+        # sobel filter
+        #X_preprocessed[im_num] = ski.filters.sobel(X_preprocessed[im_num])
+        
+        # canny edge detector
+        X_preprocessed[im_num] = ski.feature.canny(X_preprocessed[im_num], sigma=4)
+        
+        # denoise image
+        #X_preprocessed[im_num] = ski.restoration.denoise_tv_chambolle(X_preprocessed[im_num], weight=0.1)
+        
+        """# Create a temporary boolean array
+        temp_bool_img = X_preprocessed[im_num].astype(bool)
+        # Apply the function to the boolean array
+        temp_result = ski.morphology.remove_small_objects(temp_bool_img, min_size=5)
+        # Assign the result back
+        X_preprocessed[im_num] = temp_result"""
+        
+
+        # Optionally, clean up small regions that are not synapses (e.g., intestines)
+        # Label connected components and remove small objects (intestines likely being smaller than synapses)
+        labeled_image = ski.measure.label(X_preprocessed[im_num]) 
+        regions = ski.measure.regionprops(labeled_image)
+
+        # Filter based on region properties (e.g., area) to keep only large regions (synapse chain)
+        min_area = 50 # Set this based on the expected size of the synapse chain
+        large_regions = np.zeros_like(labeled_image)
+
+        for region in regions:
+            if region.area > min_area:
+                large_regions[labeled_image == region.label] = 1       
+                    
+        # The final processed image should only contain the chain-like synapse regions
+        X_preprocessed[im_num] = large_regions.astype(np.uint16)
+        
+        # Morphological operation: Dilation followed by Erosion to close the chain gaps
+        selem = ski.morphology.disk(3)  # Use a disk-shaped structuring element
+        dilated = ski.morphology.dilation(X_preprocessed[im_num], selem)
+        closed = ski.morphology.erosion(dilated, selem)
+        X_preprocessed[im_num] = closed
+        
+        #skeleton = ski.morphology.skeletonize(X_preprocessed[im_num])
+        #X_preprocessed[im_num] = skeleton"""
+        
+        
+        
+        
+        # sobel filter
+        #X_preprocessed[im_num] = ski.filters.sobel(X_preprocessed[im_num])
+        
+        # Gaussian blur
+        #X_preprocessed[im_num] = ski.filters.gaussian(X_preprocessed[im_num], sigma=100) #image disparait, ecran tout noir
+        
+        # canny edge detector
+        #X_preprocessed[im_num] = ski.feature.canny(X_preprocessed[im_num], sigma=1)
+        
+        # sobel filter
+        #X_preprocessed[im_num] = ski.filters.sobel(X_preprocessed[im_num])
+        
+        # prewitt filter
+        #X_preprocessed[im_num] = ski.filters.prewitt(X_preprocessed[im_num])
+        
+        # scharr filter
+        #X_preprocessed[im_num] = ski.filters.scharr(X_preprocessed[im_num])
+        
+        # roberts filter
+        #X_preprocessed[im_num] = ski.filters.roberts(X_preprocessed[im_num])
+        
+        # laplace filter
+        #X_preprocessed[im_num] = ski.filters.laplace(X_preprocessed[im_num])
+        
+        # median filter
+        #X_preprocessed[im_num] = ski.filters.median(X_preprocessed[im_num])
+        
+        # threshold
+        #X_preprocessed[im_num] = ski.filters.threshold_otsu(X_preprocessed[im_num])
+        
+        # threshold local
+        #X_preprocessed[im_num] = ski.filters.threshold_local(X_preprocessed[im_num], block_size=3)
+        
+        # threshold mean
+        #X_preprocessed[im_num] = ski.filters.threshold_mean(X_preprocessed[im_num])
+        
+        # threshold triangle
+        #X_preprocessed[im_num] = ski.filters.threshold_triangle(X_preprocessed[im_num])
+        
+        # threshold yen
+        #X_preprocessed[im_num] = ski.filters.threshold_yen(X_preprocessed[im_num])
+        
+        # threshold li
+        #X_preprocessed[im_num] = ski.filters.threshold_li(X_preprocessed[im_num])
+        
+        # filter rank
+        #X_preprocessed[im_num] = ski.filters.rank.median(X_preprocessed[im_num], np.ones((3,3)))
+        
     
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
