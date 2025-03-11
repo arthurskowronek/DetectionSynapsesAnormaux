@@ -377,8 +377,19 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         
         #X_preprocessed[im_num] = ski.exposure.equalize_hist(X_preprocessed[im_num]) # not a good idea
         
+        # ----- TUBNESS FILTERS -----
+        # Hessian filter
+        #X_preprocessed[im_num] = ski.filters.hessian(X_preprocessed[im_num], sigmas=range(1, 10, 2))
+        # Meijering filter
+        #X_preprocessed[im_num] = ski.filters.meijering(X_preprocessed[im_num], sigmas=range(1, 10, 2))
         # Franji filter
-        X_preprocessed[im_num] = ski.filters.frangi(X_preprocessed[im_num],black_ridges=False,sigmas=range(1, 5, 1), gamma = 70) #alpha=2, beta=0.5, gamma=15)
+        #X_preprocessed[im_num] = ski.filters.frangi(X_preprocessed[im_num],black_ridges=False,sigmas=range(1, 5, 1), gamma = 70) #alpha=2, beta=0.5, gamma=15)
+        # Sato filter
+        #X_preprocessed[im_num] = ski.filters.sato(X_preprocessed[im_num], sigmas=range(1, 10, 2), black_ridges=False)
+        # Multiscale Hessian filter
+        #X_preprocessed[im_num] = ski.filters.multiscale_hessian(X_preprocessed[im_num], sigmas=range(1, 10, 2), scale_range=None, scale_step=None, alpha=0.5, beta=0.5, gamma=15, black_ridges=False)
+        
+        
         
         # canny edge detector
         #X_preprocessed[im_num] = ski.feature.canny(X_preprocessed[im_num], sigma=2)
@@ -388,17 +399,11 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         #max_value = np.max(X_preprocessed[im_num]) # =0.99
         #print(f"Max pixel value: {max_value}")  
         #threshold_value = 0.5 * max_value
-        X_preprocessed[im_num] = X_preprocessed[im_num] > threshold_value
+        #X_preprocessed[im_num] = X_preprocessed[im_num] > threshold_value
         
         
-        # sobel filter
-        #X_preprocessed[im_num] = ski.filters.sobel(X_preprocessed[im_num])
         
-        # canny edge detector
-        X_preprocessed[im_num] = ski.feature.canny(X_preprocessed[im_num], sigma=4)
-        
-        # denoise image
-        #X_preprocessed[im_num] = ski.restoration.denoise_tv_chambolle(X_preprocessed[im_num], weight=0.1)
+    
         
         """# Create a temporary boolean array
         temp_bool_img = X_preprocessed[im_num].astype(bool)
@@ -408,7 +413,7 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         X_preprocessed[im_num] = temp_result"""
         
 
-        # Optionally, clean up small regions that are not synapses (e.g., intestines)
+        """# Optionally, clean up small regions that are not synapses (e.g., intestines)
         # Label connected components and remove small objects (intestines likely being smaller than synapses)
         labeled_image = ski.measure.label(X_preprocessed[im_num]) 
         regions = ski.measure.regionprops(labeled_image)
@@ -436,53 +441,38 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         
         
         
-        # sobel filter
-        #X_preprocessed[im_num] = ski.filters.sobel(X_preprocessed[im_num])
-        
         # Gaussian blur
         #X_preprocessed[im_num] = ski.filters.gaussian(X_preprocessed[im_num], sigma=100) #image disparait, ecran tout noir
         
+        
+        # ----- EDGE DETECTION -----
         # canny edge detector
         #X_preprocessed[im_num] = ski.feature.canny(X_preprocessed[im_num], sigma=1)
-        
-        # sobel filter
+        # sobel filter - edge detection
         #X_preprocessed[im_num] = ski.filters.sobel(X_preprocessed[im_num])
-        
-        # prewitt filter
+        # prewitt filter - edge detection
         #X_preprocessed[im_num] = ski.filters.prewitt(X_preprocessed[im_num])
-        
         # scharr filter
         #X_preprocessed[im_num] = ski.filters.scharr(X_preprocessed[im_num])
-        
         # roberts filter
         #X_preprocessed[im_num] = ski.filters.roberts(X_preprocessed[im_num])
-        
         # laplace filter
-        #X_preprocessed[im_num] = ski.filters.laplace(X_preprocessed[im_num])
+        #X_preprocessed[im_num] = ski.filters.laplace(X_preprocessed[im_num], ksize=7) # doesn't work
         
-        # median filter
-        #X_preprocessed[im_num] = ski.filters.median(X_preprocessed[im_num])
         
-        # threshold
-        #X_preprocessed[im_num] = ski.filters.threshold_otsu(X_preprocessed[im_num])
-        
+        # ----- THRESHOLDING -----
         # threshold local
         #X_preprocessed[im_num] = ski.filters.threshold_local(X_preprocessed[im_num], block_size=3)
-        
         # threshold mean
         #X_preprocessed[im_num] = ski.filters.threshold_mean(X_preprocessed[im_num])
-        
         # threshold triangle
         #X_preprocessed[im_num] = ski.filters.threshold_triangle(X_preprocessed[im_num])
-        
         # threshold yen
         #X_preprocessed[im_num] = ski.filters.threshold_yen(X_preprocessed[im_num])
-        
         # threshold li
         #X_preprocessed[im_num] = ski.filters.threshold_li(X_preprocessed[im_num])
+        #X_preprocessed[im_num] = ski.filters.try_all_threshold(X_preprocessed[im_num], figsize=(8, 5), verbose=True) # <3
         
-        # filter rank
-        #X_preprocessed[im_num] = ski.filters.rank.median(X_preprocessed[im_num], np.ones((3,3)))
         
     
     # Save preprocessing results
