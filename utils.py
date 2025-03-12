@@ -4,6 +4,7 @@ import joblib
 import datetime
 import cv2
 import numpy as np
+import pandas as pd
 from numpy.random import RandomState, MT19937, SeedSequence
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -13,8 +14,10 @@ from skimage.io import imread
 from skimage.measure import label, regionprops
 from skimage.filters import threshold_otsu
 from skimage.transform import resize
+from skimage.color import label2rgb
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier
 
 from medpy.filter.smoothing import anisotropic_diffusion
 
@@ -39,6 +42,9 @@ IN_PARAM = np.array([MAX_BINS, LEARN_RATE, MAX_ITER], dtype='float')
 
 # Set random seed for reproducibility
 SEED = RandomState(MT19937(SeedSequence(753)))
+
+# Minimum area for features
+MIN_AREA_FEATURE = 10
 
 
 ### ------------------------------- UTILS ------------------------------- ###
@@ -329,6 +335,133 @@ def display_6_images(image1, image2, image3, image4, image5, image6, titles=None
     plt.tight_layout()
     plt.show()
 
+def get_image_with_color_features(X_original, X_preprocessed):
+            
+    # Process image to show components
+    # Threshold and label image
+    threshold = threshold_otsu(X_preprocessed)
+    binary_image = X_preprocessed > threshold
+    labeled_components = label(binary_image)
+             
+    # Filter small components
+    component_props = regionprops(labeled_components)
+    for component in component_props:
+        if component.area < MIN_AREA_FEATURE:
+            for x_p, y_p in component.coords:
+                labeled_components[x_p, y_p] = 0
+                
+    # Normalize original image for overlay
+    if np.max(X_original) > np.min(X_original):
+        normalized_im = (X_original - np.min(X_original)) / (np.max(X_original) - np.min(X_original))
+    else:
+        normalized_im = np.zeros_like(X_original)
+             
+    print(f"shape of normalized_im: {normalized_im.shape}")
+    # Create overlay
+    colored_image = label2rgb(
+        labeled_components, 
+        image=normalized_im, 
+        bg_label=0
+    )
+            
+    return colored_image
+
+# Analysis functions
+def show_errors(X, y, X_feat, X_preprocessed):
+    """
+    Display misclassified images with labeled components overlaid.
+    
+    Parameters
+    ----------
+    X_feat : ndarray
+        Feature vectors
+    y : array-like
+        Labels
+    features : dict
+        Features dictionary with filenames
+    X : ndarray
+        Original images
+    X_frangi : ndarray
+        Frangi-filtered images
+    min_area : int, optional
+        Minimum component area to keep
+    random_state : int or None, optional
+        Random state for splitting data
+    test_size : float, optional
+        Proportion of data to use for testing
+    
+    Returns
+    -------
+    dict
+        Classification results summary
+    """
+    
+    # Convert inputs to pandas for easier handling
+    X_feat_df = pd.DataFrame(X_feat)
+    y_series = pd.Series(y)
+    
+    # Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(
+            X_feat_df, y_series, test_size=0.2, random_state=None
+    )
+    
+    # Train classifier
+    print("Training classifier...")
+    clf = HistGradientBoostingClassifier()
+    
+    clf.fit(X_train, y_train)
+    predictions = clf.predict(X_test)
+    
+    # Track results
+    correct = 0
+    errors = []
+    
+    # Process each prediction
+    print("\nAnalyzing misclassifications:")
+    for im_num in range(len(predictions)):
+        true_label = y_test.iloc[im_num]
+        predicted_label = predictions[im_num]
+        original_im_index = y_test.index[im_num]
+        
+        if predicted_label != true_label:
+            # Get filename for the misclassified image
+            file_name = f"image_{original_im_index}"
+            
+            print(f'Error on image {original_im_index}: predicted {predicted_label}, actual {true_label}, file {file_name}')
+            errors.append((original_im_index, predicted_label, true_label))
+            
+            image_label_overlay = get_image_with_color_features(X[original_im_index], X_preprocessed[original_im_index])
+                
+            # Display image with overlay
+            fig, ax = plt.subplots(figsize=(10, 8))
+            ax.set_title(f'File: {file_name}\nPredicted: {predicted_label}, Actual: {true_label}')
+            ax.imshow(image_label_overlay)
+            ax.set_axis_off()
+            plt.tight_layout()
+            plt.show()
+   
+        else:
+            correct += 1
+    
+    # Print results summary
+    total = len(predictions)
+    accuracy = correct / total if total > 0 else 0
+    print(f'\nResults: {correct}/{total} correct predictions ({accuracy:.1%})')
+    
+    if len(errors) > 0:
+        print(f'Total misclassifications: {len(errors)}')
+    
+    # Return results dictionary
+    return {
+        'accuracy': accuracy,
+        'correct': correct,
+        'total': total,
+        'errors': errors,
+        'classifier': clf
+    }
+
+
+
 ### --------------------------- PREPROCESSING --------------------------- ###
 ### --------------------------------------------------------------------- ###
 
@@ -361,7 +494,7 @@ def close_gap_between_edges(image, max_distance=5):
     closed = ski.morphology.erosion(dilated, selem)
     return closed
 
-def creat_mask_synapse(image):
+def creat_mask_synapse(image): # A AMELIORER
     # ----- ADJUST CONTRAST ----- 
     #image = anisotropic_diffusion(image) # remove noise and enhance edges
     #image = exposure.adjust_gamma(image, gamma=3) 
@@ -444,8 +577,7 @@ def creat_mask_synapse(image):
     
     return image.astype(np.uint16)
         
-
-def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
+def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
     Apply preprocessing (Frangi filter) to images.
     
@@ -547,7 +679,78 @@ def first_neighbor_distance_histogram(positions, bins):
         return histo / sum_histo
     return histo
 
-def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
+def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AMELIORER
+    """
+    Create a feature vector from a preprocessed image.
+    
+    Parameters
+    ----------
+    image : ndarray
+        Preprocessed image
+    n_features : int
+        Number of features
+    n_bins : int
+        Number of bins for histograms
+        
+    Returns
+    -------
+    ndarray
+        Feature vector
+    """
+    # Threshold and label image
+    threshold = threshold_otsu(image)
+    binary_image = image > threshold
+    labeled_components = label(binary_image)
+    component_props = regionprops(labeled_components, intensity_image=image)
+
+    # Filter components by size
+    sel_component_props = [x for x in component_props if x.area > MIN_AREA_COMPO]
+    
+    if not sel_component_props:
+        print("Warning: No components found in image")
+        return np.zeros(n_features * (n_bins - 1))
+    
+    # Extract properties
+    axis_M_ls = [x.axis_major_length for x in sel_component_props]
+    ratio_axis = [x.axis_minor_length/x.axis_major_length for x in sel_component_props]
+    centroids = [x.centroid for x in sel_component_props]
+    extents = [x.extent for x in sel_component_props]
+    
+    # Compute feature histograms
+    feat = []
+
+    # Major axis length histogram
+    feat1, bins = np.histogram(
+        axis_M_ls,
+        bins=np.linspace(start=3, stop=20, num=n_bins),
+        density=True
+    )
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+
+    # Axis ratio histogram
+    feat1, bins = np.histogram(
+        ratio_axis,
+        bins=np.linspace(start=0, stop=1, num=n_bins),
+        density=True
+    )
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+
+    # Extent histogram
+    feat1, bins = np.histogram(
+        extents,
+        bins=np.linspace(start=0, stop=1, num=n_bins),
+        density=True
+    )
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+
+    # Distance to nearest neighbor histogram
+    bins = np.linspace(start=3, stop=30, num=n_bins)
+    feat1 = first_neighbor_distance_histogram(np.array(centroids), bins)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+
+    return feat
+
+def get_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
     Create feature vectors from preprocessed images.
     
@@ -591,12 +794,14 @@ def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_fe
             print('Features file not found. Recomputing...')
             recompute = True
     
+    # If recompute is True or features not found : compute features
     if recompute:
         print('Computing features...')
         
+        # Initialize feature matrix
         X_feat = np.zeros((len(X), n_features * (n_bins - 1))) 
         features = {
-            'description': 'C elegans images features from frangi blobs',
+            'description': 'C elegans images features',
             'label': [],
             'data': [],
             'filename': []
@@ -605,63 +810,16 @@ def create_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_fe
         for im_num, image in enumerate(X):
             print(f'Extracting features for image {im_num+1}/{len(X)}')
             
-            # Threshold and label image
-            threshold = threshold_otsu(image)
-            binary_image = image > threshold
-            labeled_components = label(binary_image)
-            component_props = regionprops(labeled_components, intensity_image=image)
+            # Compute feature vector
+            feat = create_feature_vector(image, n_features, n_bins)
 
-            # Filter components by size
-            sel_component_props = [x for x in component_props if x.area > MIN_AREA_COMPO]
-            
-            if not sel_component_props:
-                print(f"Warning: No components found in image {im_num}")
-                feat = np.zeros(n_features * (n_bins - 1))
-            else:
-                # Extract properties
-                axis_M_ls = [x.axis_major_length for x in sel_component_props]
-                ratio_axis = [x.axis_minor_length/x.axis_major_length for x in sel_component_props]
-                centroids = [x.centroid for x in sel_component_props]
-                extents = [x.extent for x in sel_component_props]
-                
-                # Compute feature histograms
-                feat = []
-
-                # Major axis length histogram
-                feat1, bins = np.histogram(
-                    axis_M_ls,
-                    bins=np.linspace(start=3, stop=20, num=n_bins),
-                    density=True
-                )
-                feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-
-                # Axis ratio histogram
-                feat1, bins = np.histogram(
-                    ratio_axis,
-                    bins=np.linspace(start=0, stop=1, num=n_bins),
-                    density=True
-                )
-                feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-
-                # Extent histogram
-                feat1, bins = np.histogram(
-                    extents,
-                    bins=np.linspace(start=0, stop=1, num=n_bins),
-                    density=True
-                )
-                feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-
-                # Distance to nearest neighbor histogram
-                bins = np.linspace(start=3, stop=30, num=n_bins)
-                feat1 = first_neighbor_distance_histogram(np.array(centroids), bins)
-                feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-
+            # Save features in dictionary
             features['label'].append(y[im_num])
             features['data'].append(feat)
             features['filename'].append(f"image_{im_num}")  # Fallback filename
             X_feat[im_num, :] = feat
 
-        # Save features
+        # Save features in pkl file
         joblib.dump(features, features_file_name)
         shutil.move(features_file_name, DATASET_PKL_DIR)
         print(f'Features computed and saved to {DATASET_PKL_DIR / features_file_name}')

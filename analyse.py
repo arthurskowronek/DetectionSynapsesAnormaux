@@ -7,8 +7,6 @@ from skimage.filters import threshold_otsu
 from skimage.measure import label, regionprops
 from skimage.color import label2rgb
 
-MIN_AREA_COMPO = 5
-
 
 def show_dataset_properties(data):
     """
@@ -92,127 +90,6 @@ def display_histogram(image, max_pixel, number=None, image_type=''):
         plt.tight_layout()
         plt.show() 
 
-
-def show_errors(X_feat, y, X, X_preprocessed, min_area=MIN_AREA_COMPO, random_state=None, test_size=0.2):
-    """
-    Display misclassified images with labeled components overlaid.
-    
-    Parameters
-    ----------
-    X_feat : ndarray
-        Feature vectors
-    y : array-like
-        Labels
-    features : dict
-        Features dictionary with filenames
-    X : ndarray
-        Original images
-    X_frangi : ndarray
-        Frangi-filtered images
-    min_area : int, optional
-        Minimum component area to keep
-    random_state : int or None, optional
-        Random state for splitting data
-    test_size : float, optional
-        Proportion of data to use for testing
-    
-    Returns
-    -------
-    dict
-        Classification results summary
-    """
-    
-    # Convert inputs to pandas for easier handling
-    X_feat_df = pd.DataFrame(X_feat)
-    y_series = pd.Series(y)
-    
-    # Split data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(
-            X_feat_df, y_series, test_size=test_size, random_state=random_state
-    )
-    
-    # Train classifier
-    print("Training classifier...")
-    clf = HistGradientBoostingClassifier()
-    
-    clf.fit(X_train, y_train)
-    predictions = clf.predict(X_test)
-    
-    # Track results
-    correct = 0
-    errors = []
-    
-    # Process each prediction
-    print("\nAnalyzing misclassifications:")
-    for im_num in range(len(predictions)):
-        true_label = y_test.iloc[im_num]
-        predicted_label = predictions[im_num]
-        original_im_index = y_test.index[im_num]
-        
-        if predicted_label != true_label:
-            # Get filename for the misclassified image
-            file_name = f"image_{original_im_index}"
-            
-            print(f'Error on image {original_im_index}: predicted {predicted_label}, actual {true_label}, file {file_name}')
-            errors.append((original_im_index, predicted_label, true_label))
-            
-            # Get original and processed images
-            test_im = X[original_im_index]
-            test_im_frangi = X_preprocessed[original_im_index]
-            
-            # Process image to show components
-            # Threshold and label image
-            threshold = threshold_otsu(test_im_frangi)
-            binary_image = test_im_frangi > threshold
-            labeled_components = label(binary_image)
-                
-            # Filter small components
-            component_props = regionprops(labeled_components)
-            for component in component_props:
-                if component.area < min_area:
-                    for x_p, y_p in component.coords:
-                        labeled_components[x_p, y_p] = 0
-                
-            # Normalize original image for overlay
-            if np.max(test_im) > np.min(test_im):
-                normalized_im = (test_im - np.min(test_im)) / (np.max(test_im) - np.min(test_im))
-            else:
-               normalized_im = np.zeros_like(test_im)
-                
-            # Create overlay
-            image_label_overlay = label2rgb(
-                labeled_components, 
-                image=normalized_im, 
-                bg_label=0
-            )
-                
-            # Display image with overlay
-            fig, ax = plt.subplots(figsize=(10, 8))
-            ax.set_title(f'File: {file_name}\nPredicted: {predicted_label}, Actual: {true_label}')
-            ax.imshow(image_label_overlay)
-            ax.set_axis_off()
-            plt.tight_layout()
-            plt.show()
-   
-        else:
-            correct += 1
-    
-    # Print results summary
-    total = len(predictions)
-    accuracy = correct / total if total > 0 else 0
-    print(f'\nResults: {correct}/{total} correct predictions ({accuracy:.1%})')
-    
-    if len(errors) > 0:
-        print(f'Total misclassifications: {len(errors)}')
-    
-    # Return results dictionary
-    return {
-        'accuracy': accuracy,
-        'correct': correct,
-        'total': total,
-        'errors': errors,
-        'classifier': clf
-    }
 
 def show_distribution_features(X_feat, features, mutant_label="Mutant", wt_label="WildType"):
     distrib_WT = np.zeros_like(features['data'][0])

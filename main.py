@@ -15,7 +15,7 @@ def pipeline():
     y = np.array(data['label'])
     
     # Preprocessing
-    X_preprocessed = preprocess_images(recompute=False, X=X, pkl_name=filename_pkl_dataset)
+    X_preprocessed = get_preprocess_images(recompute=False, X=X, pkl_name=filename_pkl_dataset)
     
     # Display sample images
     if len(X) > 0:
@@ -25,7 +25,7 @@ def pipeline():
         display_image(X_preprocessed[sample_idx], sample_idx, 'Frangi')
     
     # Compute features
-    X_features, features = create_feature_vector(X_preprocessed, y, recompute=False, pkl_name=filename_pkl_dataset)
+    X_features, features = get_feature_vector(X_preprocessed, y, recompute=False, pkl_name=filename_pkl_dataset)
     
     # Training
     print('Training model...')
@@ -51,11 +51,18 @@ def test():
     
     # Preprocessing
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    X_preprocessed = preprocess_images(recompute=True, X=X) #, pkl_name=filename_pkl_dataset)
+    X_preprocessed = get_preprocess_images(recompute=True, X=X) #, pkl_name=filename_pkl_dataset)
     
-    X_hist = create_histogram(X_preprocessed)
+    #X_hist = create_histogram(X_preprocessed)
                                       
-    display_6_images(X[0], X_preprocessed[0], X_hist[0], X[1], X_preprocessed[1], X_hist[1], ["Original Mutant", "Process Mutant", "Histogram Mutant", "Original Wild-Type", "Process Wild-Type", "Histogram Wild-Type"])
+    #display_6_images(X[0], X_preprocessed[0], X_hist[0], X[1], X_preprocessed[1], X_hist[1], ["Original Mutant", "Process Mutant", "Histogram Mutant", "Original Wild-Type", "Process Wild-Type", "Histogram Wild-Type"])
+    display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
+
+    # Compute features
+    X_features, features = get_feature_vector(X_preprocessed, y, recompute=True)
+    
+    show_errors(X, y, X_features, X_preprocessed)
+
 
 if __name__ == "__main__":
     
