@@ -2,6 +2,7 @@ import os
 import shutil
 import joblib
 import datetime
+import cv2
 import numpy as np
 from numpy.random import RandomState, MT19937, SeedSequence
 import matplotlib.pyplot as plt
@@ -14,6 +15,8 @@ from skimage.filters import threshold_otsu
 from skimage.transform import resize
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+
+from medpy.filter.smoothing import anisotropic_diffusion
 
 # Constants
 DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -329,6 +332,119 @@ def display_6_images(image1, image2, image3, image4, image5, image6, titles=None
 ### --------------------------- PREPROCESSING --------------------------- ###
 ### --------------------------------------------------------------------- ###
 
+def remove_small_objects(image, option=1, min_size_value=30):
+    if option == 1:
+        bool_img = image.astype(bool)
+        temp_result = ski.morphology.remove_small_objects(bool_img, min_size=min_size_value)
+        image = temp_result
+        return image
+    elif option == 2:
+        # Label connected components and remove small objects (intestines likely being smaller than synapses)
+        labeled_image = ski.measure.label(image) 
+        regions = ski.measure.regionprops(labeled_image)
+        # Filter based on region properties (e.g., area) to keep only large regions (synapse chain)
+        large_regions = np.zeros_like(labeled_image)
+
+        for region in regions:
+            if region.area > min_size_value:
+                large_regions[labeled_image == region.label] = 1       
+        # The final processed image should only contain the chain-like synapse regions
+        return large_regions.astype(np.uint16)
+    else:
+        print("Option not available")
+        return image
+
+def close_gap_between_edges(image, max_distance=5):
+    # Morphological operation: Dilation followed by Erosion to close the chain gaps
+    selem = ski.morphology.disk(max_distance)  # Use a disk-shaped structuring element
+    dilated = ski.morphology.dilation(image, selem)
+    closed = ski.morphology.erosion(dilated, selem)
+    return closed
+
+def creat_mask_synapse(image):
+    # ----- ADJUST CONTRAST ----- 
+    #image = anisotropic_diffusion(image) # remove noise and enhance edges
+    #image = exposure.adjust_gamma(image, gamma=3) 
+    #image = exposure.adjust_log(image, gain=2, inv=False) 
+    #image = ski.exposure.equalize_hist(image) # not a good idea
+        
+        
+    # ----- TUBNESS FILTERS -----
+    # Meijering filter
+    #image = ski.filters.meijering(image, sigmas=range(1, 8, 2), black_ridges=False) # quand on baisse le sigma max, on garde seulement les vaisseaux fins
+    # Sato filter
+    #image = ski.filters.sato(image, sigmas=range(1, 8, 2), black_ridges=False)
+    # Hessian filter
+    #image = ski.filters.hessian(image,black_ridges=False,sigmas=range(1, 5, 1), alpha=2, beta=0.5, gamma=15)
+    # Franji filter
+    image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
+    #image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=15)
+        
+    # gabors filter
+    #real, imag = ski.filters.gabor(image, frequency=0.5)
+    #image = real 
+        
+    # hysterisis thresholding
+    image = ski.filters.apply_hysteresis_threshold(image, 0.1, 0.2)
+        
+        
+    # ----- DENOISE -----
+    #image = ski.restoration.denoise_nl_means(image, h=0.7)
+    #image = ski.restoration.denoise_bilateral(image)
+    #image = ski.restoration.denoise_tv_chambolle(image, weight=0.1)
+    #image = ski.restoration.denoise_bilateral(image)
+        
+        
+        
+    # ----- SKELETON ------
+    #image = ski.morphology.skeletonize(image)
+
+    # ----- REMOVE SMALL OBJECTS -----
+    #image = remove_small_objects(image, option=2, min_size_value=10)
+        
+        
+        
+    # ----- CLOSE GAP BETWEEN EDGES -----
+    #image = close_gap_between_edges(image, max_distance=3)
+        
+        
+    # ----- THRESHOLDING -----
+    # threshold otsu
+    #threshold_value = ski.filters.threshold_otsu(image)
+    # threshold local
+    #threshold_value = ski.filters.threshold_local(image, block_size=3)
+    # threshold mean
+    #threshold_value = ski.filters.threshold_mean(image)
+    # threshold triangle
+    #threshold_value = ski.filters.threshold_triangle(image)
+    # threshold yen
+    #threshold_value = ski.filters.threshold_yen(image)
+    # threshold li
+    #threshold_value = ski.filters.threshold_li(image)
+    #fig, ax = ski.filters.try_all_threshold(image, figsize=(8, 5), verbose=True) 
+    #plt.show()
+    #image = image  > threshold_value
+        
+    # ----- EDGE DETECTION -----
+    # canny edge detector
+    #image = ski.feature.canny(image, sigma=1)
+    # sobel filter - edge detection
+    #image = ski.filters.sobel(image)
+    # prewitt filter - edge detection
+    #image = ski.filters.prewitt(image)
+    # scharr filter
+    #image = ski.filters.scharr(image)
+    # roberts filter
+    #image = ski.filters.roberts(image)
+    # laplace filter
+    #image = ski.filters.laplace(image, ksize=3) # doesn't work
+    
+    # dilate image
+    image = ski.morphology.dilation(image)
+    
+    return image.astype(np.uint16)
+        
+
 def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
     Apply preprocessing (Frangi filter) to images.
@@ -368,92 +484,11 @@ def preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     
     for im_num, image in enumerate(X):
         print(f'Processing image {im_num+1}/{len(X)}')
-        # no filter
-        X_preprocessed[im_num] = image
         
-        # ----- ADJUST CONTRAST -----
-        #X_preprocessed[im_num] = exposure.adjust_gamma(X_preprocessed[im_num], gamma=1) 
-        #X_preprocessed[im_num] = exposure.adjust_log(X_preprocessed[im_num], gain=0.8, inv=False) 
-        #X_preprocessed[im_num] = ski.exposure.equalize_hist(X_preprocessed[im_num]) # not a good idea
+        mask_synapses = creat_mask_synapse(image)
         
-        
-        # ----- TUBNESS FILTERS -----
-        # Hessian filter
-        #X_preprocessed[im_num] = ski.filters.hessian(X_preprocessed[im_num], sigmas=range(1, 10, 2))
-        # Meijering filter
-        #X_preprocessed[im_num] = ski.filters.meijering(X_preprocessed[im_num], sigmas=range(1, 10, 2))
-        # Franji filter
-        #X_preprocessed[im_num] = ski.filters.frangi(X_preprocessed[im_num],black_ridges=False,sigmas=range(1, 5, 1), gamma = 70) #alpha=2, beta=0.5, gamma=15)
-        # Sato filter
-        #X_preprocessed[im_num] = ski.filters.sato(X_preprocessed[im_num], sigmas=range(1, 10, 2), black_ridges=False)
-        # Multiscale Hessian filter
-        #X_preprocessed[im_num] = ski.filters.multiscale_hessian(X_preprocessed[im_num], sigmas=range(1, 10, 2), scale_range=None, scale_step=None, alpha=0.5, beta=0.5, gamma=15, black_ridges=False)
-        
-        
-        # ----- SKELETON ------
-        #skeleton = ski.morphology.skeletonize(X_preprocessed[im_num])
-        #X_preprocessed[im_num] = skeleton
-        
-        
-        # ----- REMOVE SMALL OBJECTS -----
-        # OPTION 1
-        """bool_img = X_preprocessed[im_num].astype(bool)
-        temp_result = ski.morphology.remove_small_objects(bool_img, min_size=5)
-        X_preprocessed[im_num] = temp_result"""
-        # OPTION 2
-        """# Label connected components and remove small objects (intestines likely being smaller than synapses)
-        labeled_image = ski.measure.label(X_preprocessed[im_num]) 
-        regions = ski.measure.regionprops(labeled_image)
-        # Filter based on region properties (e.g., area) to keep only large regions (synapse chain)
-        min_area = 50 # Set this based on the expected size of the synapse chain
-        large_regions = np.zeros_like(labeled_image)
-
-        for region in regions:
-            if region.area > min_area:
-                large_regions[labeled_image == region.label] = 1       
-        # The final processed image should only contain the chain-like synapse regions
-        X_preprocessed[im_num] = large_regions.astype(np.uint16)"""
-        
-        
-        # ----- CLOSE GAP BETWEEN EDGES -----
-        # Morphological operation: Dilation followed by Erosion to close the chain gaps
-        """selem = ski.morphology.disk(3)  # Use a disk-shaped structuring element
-        dilated = ski.morphology.dilation(X_preprocessed[im_num], selem)
-        closed = ski.morphology.erosion(dilated, selem)
-        X_preprocessed[im_num] = closed"""
-        
-        
-        # ----- EDGE DETECTION -----
-        # canny edge detector
-        #X_preprocessed[im_num] = ski.feature.canny(X_preprocessed[im_num], sigma=1)
-        # sobel filter - edge detection
-        #X_preprocessed[im_num] = ski.filters.sobel(X_preprocessed[im_num])
-        # prewitt filter - edge detection
-        #X_preprocessed[im_num] = ski.filters.prewitt(X_preprocessed[im_num])
-        # scharr filter
-        #X_preprocessed[im_num] = ski.filters.scharr(X_preprocessed[im_num])
-        # roberts filter
-        #X_preprocessed[im_num] = ski.filters.roberts(X_preprocessed[im_num])
-        # laplace filter
-        #X_preprocessed[im_num] = ski.filters.laplace(X_preprocessed[im_num], ksize=7) # doesn't work
-        
-        
-        # ----- THRESHOLDING -----
-        # threshold otsu
-        #threshold_value = ski.filters.threshold_otsu(X_preprocessed[im_num])
-        #X_preprocessed[im_num] = X_preprocessed[im_num] > threshold_value
-        # threshold local
-        #X_preprocessed[im_num] = ski.filters.threshold_local(X_preprocessed[im_num], block_size=3)
-        # threshold mean
-        #X_preprocessed[im_num] = ski.filters.threshold_mean(X_preprocessed[im_num])
-        # threshold triangle
-        #X_preprocessed[im_num] = ski.filters.threshold_triangle(X_preprocessed[im_num])
-        # threshold yen
-        #X_preprocessed[im_num] = ski.filters.threshold_yen(X_preprocessed[im_num])
-        # threshold li
-        #X_preprocessed[im_num] = ski.filters.threshold_li(X_preprocessed[im_num])
-        #X_preprocessed[im_num] = ski.filters.try_all_threshold(X_preprocessed[im_num], figsize=(8, 5), verbose=True) # <3
-        
+        # apply mask to original image
+        X_preprocessed[im_num] = cv2.bitwise_and(image, mask_synapses)
         
     
     # Save preprocessing results
