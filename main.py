@@ -1,5 +1,4 @@
 from utils import *
-from analyse import *
 
 
 def pipeline():
@@ -65,6 +64,9 @@ def test():
     X_colored = colorize_image(X, features)
     display_4_images(X[0], X_colored[0], X[1], X_colored[1], ["Original Mutant", "Colored Mutant", "Original Wild-Type", "Colored Wild-Type"])
 
+    # Training
+    #mean_accuracy = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
+    #print(f'Mean accuracy: {100*mean_accuracy:.1f}%')
 
 
 if __name__ == "__main__":
