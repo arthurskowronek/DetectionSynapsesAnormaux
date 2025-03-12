@@ -335,20 +335,18 @@ def display_6_images(image1, image2, image3, image4, image5, image6, titles=None
     plt.tight_layout()
     plt.show()
 
-def get_image_with_color_features(X_original, X_preprocessed):
-            
-    # Process image to show components
-    # Threshold and label image
-    threshold = threshold_otsu(X_preprocessed)
-    binary_image = X_preprocessed > threshold
-    labeled_components = label(binary_image)
-             
-    # Filter small components
-    component_props = regionprops(labeled_components)
-    for component in component_props:
+def colorize_image(X_original, features):
+    colored_image = np.zeros((len(X_original), X_original.shape[1], X_original.shape[2], 3)) 
+    for i, image in enumerate(X_original):
+        colored_image[i] = get_image_with_color_features(X_original[i], features['components'][i], features['label_components'][i])
+    return colored_image
+
+def get_image_with_color_features(X_original, components, label_components):
+    
+    for component in components:
         if component.area < MIN_AREA_FEATURE:
             for x_p, y_p in component.coords:
-                labeled_components[x_p, y_p] = 0
+                label_components[x_p, y_p] = 0
                 
     # Normalize original image for overlay
     if np.max(X_original) > np.min(X_original):
@@ -359,7 +357,7 @@ def get_image_with_color_features(X_original, X_preprocessed):
     print(f"shape of normalized_im: {normalized_im.shape}")
     # Create overlay
     colored_image = label2rgb(
-        labeled_components, 
+        label_components, 
         image=normalized_im, 
         bg_label=0
     )
@@ -748,7 +746,7 @@ def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AME
     feat1 = first_neighbor_distance_histogram(np.array(centroids), bins)
     feat = np.append(feat, feat1 * (bins[1] - bins[0]))
 
-    return feat
+    return feat, sel_component_props, labeled_components
 
 def get_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
@@ -804,19 +802,23 @@ def get_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_featu
             'description': 'C elegans images features',
             'label': [],
             'data': [],
-            'filename': []
+            'filename': [], 
+            'components': [],
+            'label_components': []
         }
 
         for im_num, image in enumerate(X):
             print(f'Extracting features for image {im_num+1}/{len(X)}')
             
             # Compute feature vector
-            feat = create_feature_vector(image, n_features, n_bins)
-
+            feat, components, label_components = create_feature_vector(image, n_features, n_bins)
+            
             # Save features in dictionary
             features['label'].append(y[im_num])
             features['data'].append(feat)
             features['filename'].append(f"image_{im_num}")  # Fallback filename
+            features['components'].append(components)
+            features['label_components'].append(label_components)
             X_feat[im_num, :] = feat
 
         # Save features in pkl file

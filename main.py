@@ -61,7 +61,10 @@ def test():
     # Compute features
     X_features, features = get_feature_vector(X_preprocessed, y, recompute=True)
     
-    show_errors(X, y, X_features, X_preprocessed)
+    # Show features
+    X_colored = colorize_image(X, features)
+    display_4_images(X[0], X_colored[0], X[1], X_colored[1], ["Original Mutant", "Colored Mutant", "Original Wild-Type", "Colored Wild-Type"])
+
 
 
 if __name__ == "__main__":
