@@ -736,6 +736,8 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         masked_image[mask_synapses] = image[mask_synapses]
         X_preprocessed[im_num] = masked_image
         
+        
+        
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
     joblib.dump(X_preprocessed, preprocess_file)

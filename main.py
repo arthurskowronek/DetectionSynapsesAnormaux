@@ -58,11 +58,11 @@ def test():
     display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
 
     # Compute features
-    #X_features, features = get_feature_vector(X_preprocessed, y, recompute=True)
+    X_features, features = get_feature_vector(X_preprocessed, y, recompute=True)
     
     # Show features
-    #X_colored = colorize_image(X, features)
-    #display_4_images(X[0], X_colored[0], X[1], X_colored[1], ["Original Mutant", "Colored Mutant", "Original Wild-Type", "Colored Wild-Type"])
+    X_colored = colorize_image(X, features)
+    display_4_images(X[0], X_colored[0], X[1], X_colored[1], ["Original Mutant", "Colored Mutant", "Original Wild-Type", "Colored Wild-Type"])
 
     # Training
     #mean_accuracy = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
