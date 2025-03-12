@@ -683,13 +683,14 @@ def creat_mask_synapse(image): # A AMELIORER
     #image = ski.filters.laplace(image, ksize=3) # doesn't work
     
     # dilate image
-    image = ski.morphology.dilation(image)
+    selem = ski.morphology.disk(3)
+    image = ski.morphology.dilation(image, selem)
     
-    return image.astype(np.uint16)
+    return image
         
 def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
-    Apply preprocessing (Frangi filter) to images.
+    Apply preprocessing to images.
     
     Parameters
     ----------
@@ -727,12 +728,14 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     for im_num, image in enumerate(X):
         print(f'Processing image {im_num+1}/{len(X)}')
         
+        # Create mask for synapses
         mask_synapses = creat_mask_synapse(image)
         
-        # apply mask to original image
-        X_preprocessed[im_num] = cv2.bitwise_and(image, mask_synapses)
+        # Apply mask to original image
+        masked_image = np.zeros_like(X_preprocessed[im_num])
+        masked_image[mask_synapses] = image[mask_synapses]
+        X_preprocessed[im_num] = masked_image
         
-    
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
     joblib.dump(X_preprocessed, preprocess_file)
