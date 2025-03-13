@@ -19,6 +19,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import HistGradientBoostingClassifier
 
+from scipy.ndimage import distance_transform_edt
 from medpy.filter.smoothing import anisotropic_diffusion
 
 # Constants
@@ -629,7 +630,7 @@ def creat_mask_synapse(image): # A AMELIORER
         
     # hysterisis thresholding
     image = ski.filters.apply_hysteresis_threshold(image, 0.1, 0.2)
-        
+      
         
     # ----- DENOISE -----
     #image = ski.restoration.denoise_nl_means(image, h=0.7)
@@ -643,12 +644,20 @@ def creat_mask_synapse(image): # A AMELIORER
     #image = ski.morphology.skeletonize(image)
 
     # ----- REMOVE SMALL OBJECTS -----
-    #image = remove_small_objects(image, option=2, min_size_value=10)
+    image = remove_small_objects(image, option=2, min_size_value=25)
         
-        
-        
-    # ----- CLOSE GAP BETWEEN EDGES -----
-    #image = close_gap_between_edges(image, max_distance=3)
+    
+    # detect components
+    labeled_image = ski.measure.label(image)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        # if components is more like a line than a blob, keep it
+        if component.major_axis_length/component.minor_axis_length > 4:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    image = label_components
         
         
     # ----- THRESHOLDING -----
@@ -681,10 +690,15 @@ def creat_mask_synapse(image): # A AMELIORER
     #image = ski.filters.roberts(image)
     # laplace filter
     #image = ski.filters.laplace(image, ksize=3) # doesn't work
+   
     
     # dilate image
     selem = ski.morphology.disk(3)
     image = ski.morphology.dilation(image, selem)
+    
+    
+    # ----- CLOSE GAP BETWEEN EDGES -----
+    image = close_gap_between_edges(image, max_distance=10)
     
     return image
         
@@ -731,11 +745,22 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         # Create mask for synapses
         mask_synapses = creat_mask_synapse(image)
         
-        # Apply mask to original image
-        masked_image = np.zeros_like(X_preprocessed[im_num])
-        masked_image[mask_synapses] = image[mask_synapses]
-        X_preprocessed[im_num] = masked_image
+        """mask_synapses = ski.filters.sobel(mask_synapses)
         
+        # Hough Transform to detect long edges
+        lines = ski.transform.probabilistic_hough_line(mask_synapses, threshold=10, line_length=5, line_gap=3)
+        for line in lines:
+            p0, p1 = line
+            mask_synapses[p0[0]:p1[0], p0[1]:p1[1]] = 1"""
+        
+        
+        
+        X_preprocessed[im_num] = mask_synapses
+        
+        # Apply mask to original image
+        """masked_image = np.zeros_like(X_preprocessed[im_num])
+        masked_image[mask_synapses] = image[mask_synapses]
+        X_preprocessed[im_num] = masked_image"""
         
         
     # Save preprocessing results
