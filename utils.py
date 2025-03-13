@@ -387,7 +387,7 @@ def get_image_with_color_features(X_original, components, label_components):
     return colored_image
 
 # Analysis functions
-def create_histogram(X):
+def get_histogram_vector(X):
     """
     Create histograms for each image in the dataset.
     
@@ -411,6 +411,8 @@ def create_histogram(X):
     X_hist = np.zeros((len(X), max_pixel))
     for im_num, image in enumerate(X):
         hist, _ = np.histogram(image.flatten(), bins=max_pixel, range=(0, max_pixel))
+        # put the first bin (0) to 0
+        hist[0] = 0
         X_hist[im_num] = hist
     return X_hist
         
@@ -638,16 +640,12 @@ def creat_mask_synapse(image): # A AMELIORER
     #image = ski.restoration.denoise_tv_chambolle(image, weight=0.1)
     #image = ski.restoration.denoise_bilateral(image)
         
-        
-        
-    # ----- SKELETON ------
-    #image = ski.morphology.skeletonize(image)
 
     # ----- REMOVE SMALL OBJECTS -----
     image = remove_small_objects(image, option=2, min_size_value=25)
         
     
-    # detect components
+    # keep only components that are more like a line than a blob
     labeled_image = ski.measure.label(image)
     components = ski.measure.regionprops(labeled_image)
     label_components = np.zeros_like(labeled_image)
@@ -692,13 +690,21 @@ def creat_mask_synapse(image): # A AMELIORER
     #image = ski.filters.laplace(image, ksize=3) # doesn't work
    
     
+    # Hough Transform to detect long edges
+    #lines = ski.transform.probabilistic_hough_line(mask_synapses, threshold=10, line_length=5, line_gap=3)
+    #for line in lines:
+        #p0, p1 = line
+        #mask_synapses[p0[0]:p1[0], p0[1]:p1[1]] = 1
+        
+    
     # dilate image
-    selem = ski.morphology.disk(3)
+    selem = ski.morphology.disk(6)
     image = ski.morphology.dilation(image, selem)
     
     
     # ----- CLOSE GAP BETWEEN EDGES -----
     image = close_gap_between_edges(image, max_distance=10)
+    
     
     return image
         
@@ -745,23 +751,8 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         # Create mask for synapses
         mask_synapses = creat_mask_synapse(image)
         
-        """mask_synapses = ski.filters.sobel(mask_synapses)
-        
-        # Hough Transform to detect long edges
-        lines = ski.transform.probabilistic_hough_line(mask_synapses, threshold=10, line_length=5, line_gap=3)
-        for line in lines:
-            p0, p1 = line
-            mask_synapses[p0[0]:p1[0], p0[1]:p1[1]] = 1"""
-        
-        
-        
-        X_preprocessed[im_num] = mask_synapses
-        
-        # Apply mask to original image
-        """masked_image = np.zeros_like(X_preprocessed[im_num])
-        masked_image[mask_synapses] = image[mask_synapses]
-        X_preprocessed[im_num] = masked_image"""
-        
+        # apply mask to original image
+        X_preprocessed[im_num] = image * mask_synapses
         
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
@@ -837,9 +828,8 @@ def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AME
     ndarray
         Feature vector
     """
-    # Threshold and label image
-    threshold = threshold_otsu(image)
-    binary_image = image > threshold
+    binary_image = image > 0 # TROUVER COMMENT AVOIR UN BON BINARY IMAGE
+    
     labeled_components = label(binary_image)
     component_props = regionprops(labeled_components, intensity_image=image)
 
