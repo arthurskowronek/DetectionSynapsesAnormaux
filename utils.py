@@ -748,11 +748,14 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     for im_num, image in enumerate(X):
         print(f'Processing image {im_num+1}/{len(X)}')
         
-        # Create mask for synapses
+        """# Create mask for synapses
         mask_synapses = creat_mask_synapse(image)
         
         # apply mask to original image
-        X_preprocessed[im_num] = image * mask_synapses
+        X_preprocessed[im_num] = image * mask_synapses"""
+        
+        
+        X_preprocessed[im_num] = ski.filters.frangi(image, black_ridges=False,sigmas=range(1, 5, 1),gamma=70)
         
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
@@ -810,7 +813,7 @@ def first_neighbor_distance_histogram(positions, bins):
         return histo / sum_histo
     return histo
 
-def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AMELIORER
+def create_feature_vector(mask, image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AMELIORER
     """
     Create a feature vector from a preprocessed image.
     
@@ -828,13 +831,31 @@ def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AME
     ndarray
         Feature vector
     """
-    binary_image = image > 0 # TROUVER COMMENT AVOIR UN BON BINARY IMAGE
+      
+    
+    # Threshold and label image
+    threshold = threshold_otsu(image)
+    binary_image = image > threshold
+    
+    
+    # apply mask to binary image
+    binary_image = binary_image * mask
+
     
     labeled_components = label(binary_image)
     component_props = regionprops(labeled_components, intensity_image=image)
 
     # Filter components by size
     sel_component_props = [x for x in component_props if x.area > MIN_AREA_COMPO]
+      
+    
+    """binary_image = image > 0 # TROUVER COMMENT AVOIR UN BON BINARY IMAGE
+    
+    labeled_components = label(binary_image)
+    component_props = regionprops(labeled_components, intensity_image=image)
+
+    # Filter components by size
+    sel_component_props = [x for x in component_props if x.area > MIN_AREA_COMPO]"""
     
     if not sel_component_props:
         print("Warning: No components found in image")
@@ -880,7 +901,7 @@ def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AME
 
     return feat, sel_component_props, labeled_components
 
-def get_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
+def get_feature_vector(mask, X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
     Create feature vectors from preprocessed images.
     
@@ -943,7 +964,7 @@ def get_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_featu
             print(f'Extracting features for image {im_num+1}/{len(X)}')
             
             # Compute feature vector
-            feat, components, label_components = create_feature_vector(image, n_features, n_bins)
+            feat, components, label_components = create_feature_vector(mask[im_num], image, n_features, n_bins)
             
             # Save features in dictionary
             features['label'].append(y[im_num])
