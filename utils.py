@@ -754,13 +754,35 @@ def get_high_intensity_pixels (mask, image):
         intensities.append(image[x, y])
         
     # smooth intensities
-    window_size = 20
-    smoothed_intensities = np.convolve(intensities, np.ones(window_size), 'valid') / window_size
-        
-    # plot intensities
+    smoothed_intensities = intensities
+    #window_size = 1
+    #smoothed_intensities = np.convolve(intensities, np.ones(window_size), 'valid') / window_size 
+    
+    # get the index of the local maxima. A maxima is a point where the intensity is greater than its neighbors (2 left and 2 right)
+    maxima = []
+    for i in range(2, len(smoothed_intensities)-2):
+        if smoothed_intensities[i] > smoothed_intensities[i-1] and smoothed_intensities[i] > smoothed_intensities[i-2] and smoothed_intensities[i] > smoothed_intensities[i+1] and smoothed_intensities[i] > smoothed_intensities[i+2]:
+            maxima.append(i)
+    
+    # plot the maxima
     plt.plot(smoothed_intensities)
-    plt.show()
-
+    plt.plot(maxima, [smoothed_intensities[i] for i in maxima], 'ro')
+    plt.show() 
+    
+    # get pixel coordinates of the maxima
+    maxima_coords = []
+    for i in maxima:
+        maxima_coords.append(ordered_skeleton_points[i])
+        
+    # plot the maxima on the image
+    for x, y in maxima_coords:
+        for i in range(-1,1):
+            for j in range(-1,1):
+                if x+i >= 0 and x+i < image.shape[0] and y+j >= 0 and y+j < image.shape[1]:
+                    image[x+i, y+j] = 65535
+        
+    display_image(image)
+    
 
 
 def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
