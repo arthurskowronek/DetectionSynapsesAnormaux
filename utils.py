@@ -765,9 +765,17 @@ def get_high_intensity_pixels (mask, image):
             maxima.append(i)
     
     # plot the maxima
-    plt.plot(smoothed_intensities)
-    plt.plot(maxima, [smoothed_intensities[i] for i in maxima], 'ro')
-    plt.show() 
+    #plt.plot(smoothed_intensities)
+    #plt.plot(maxima, [smoothed_intensities[i] for i in maxima], 'ro')
+    #plt.show() 
+    
+    # x is a vector from 1 to the length of the smoothed intensities
+    x = np.arange(len(smoothed_intensities))
+    
+    # get the plot to the derive of the smoothed intensities
+    derive = np.gradient(smoothed_intensities, x)
+    #plt.plot(derive)
+    #plt.show()
     
     # get pixel coordinates of the maxima
     maxima_coords = []
@@ -782,6 +790,9 @@ def get_high_intensity_pixels (mask, image):
                     image[x+i, y+j] = 65535
         
     display_image(image)
+    
+    
+    return smoothed_intensities, derive
     
 
 
@@ -828,7 +839,7 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         # Create mask for synapses
         mask_synapses = creat_mask_synapse(image)
         
-        get_high_intensity_pixels(mask_synapses, image)
+        intensity, derivative_intensity = get_high_intensity_pixels(mask_synapses, image)
         
         
         # apply mask to original image
@@ -843,7 +854,7 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     shutil.move(preprocess_file, DATASET_PKL_DIR)
     print(f'Preprocessing done and saved to {DATASET_PKL_DIR / preprocess_file}')
     
-    return X_preprocessed
+    return X_preprocessed, intensity, derivative_intensity
 
 
 ### ----------------------------- FEATURES ------------------------------ ###
