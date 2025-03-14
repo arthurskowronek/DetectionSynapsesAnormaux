@@ -39,7 +39,7 @@ def pipeline():
 def test():
     # Load dataset
     filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    data = create_dataset(reimport_images=True) #, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Display dataset properties
     #show_dataset_properties(data)
@@ -52,29 +52,34 @@ def test():
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
     X_preprocessed = get_preprocess_images(recompute=True, X=X) #, pkl_name=filename_pkl_dataset)
     
-    #X_hist = get_histogram_vector(X_preprocessed)
+    X_hist = get_histogram_vector(X_preprocessed)
                                       
-    #display_6_images(X[0], X_preprocessed[0], X_hist[0], X[1], X_preprocessed[1], X_hist[1], ["Original Mutant", "Process Mutant", "Histogram Mutant", "Original Wild-Type", "Process Wild-Type", "Histogram Wild-Type"])
-    display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
+    display_6_images(X[0], X_preprocessed[0], X_hist[0], X[1], X_preprocessed[1], X_hist[1], ["Original Mutant", "Process Mutant", "Histogram Mutant", "Original Wild-Type", "Process Wild-Type", "Histogram Wild-Type"])
+    #display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
+    
 
     # Compute features
-    mask = np.zeros_like(X_preprocessed)
+    """mask = np.zeros_like(X_preprocessed)
     for i in range(len(mask)):
-        mask[i] = creat_mask_synapse(X[i]) 
-        print(f'Image {i} done')
+        mask[i] = creat_mask_synapse(X[i])
+        print(f'Image {i} done')"""
         
-    X_features, features = get_feature_vector(mask, X_preprocessed, y, recompute=True)
+        
+    X_features, features = get_feature_vector(X_preprocessed, y, recompute=True) # mask
     
     # Show features
     X_colored = colorize_image(X, features)
     display_4_images(X[0], X_colored[0], X[1], X_colored[1], ["Original Mutant", "Colored Mutant", "Original Wild-Type", "Colored Wild-Type"])
 
     # Training
-    mean_accuracy = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
-    print(f'Mean accuracy: {100*mean_accuracy:.1f}%')
+    #mean_accuracy = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
+    #print(f'Mean accuracy: {100*mean_accuracy:.1f}%')
 
 
 if __name__ == "__main__":
     
     #pipeline()
     test()
+    
+    
+    

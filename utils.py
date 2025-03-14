@@ -3,6 +3,7 @@ import shutil
 import joblib
 import datetime
 import cv2
+import skan
 import numpy as np
 import pandas as pd
 from numpy.random import RandomState, MT19937, SeedSequence
@@ -698,7 +699,7 @@ def creat_mask_synapse(image): # A AMELIORER
         
     
     # dilate image
-    selem = ski.morphology.disk(6)
+    selem = ski.morphology.disk(5)
     image = ski.morphology.dilation(image, selem)
     
     
@@ -707,7 +708,61 @@ def creat_mask_synapse(image): # A AMELIORER
     
     
     return image
+     
+def fill_black_pixels(image): # INUTILE ?
+    # for each pixel in the image that is black, we will fill it with the mean of the 5x5 pixels around it
+    for i in range(image.shape[0]):
+        for j in range(image.shape[1]):
+            if image[i,j] == 0:
+                count_number_black_pixels = 0
+                for k in range(-2,3):
+                    for l in range(-2,3):
+                        if i+k >= 0 and i+k < image.shape[0] and j+l >= 0 and j+l < image.shape[1]:
+                            if image[i+k,j+l] == 0:
+                                count_number_black_pixels += 1
+                if count_number_black_pixels == 25:
+                    image[i,j] = 0
+                else:
+                    image[i,j] = np.sum(image[i-2:i+2,j-2:j+2])/(25-count_number_black_pixels)
+    return image    
+ 
+def order_skeleton_points_skan(skeleton):
+    # Create the Skeleton object
+    skel_obj = skan.csr.Skeleton(skeleton)
+    
+    # Get the summary with branch information
+    summary = skan.summarize(skel_obj, separator='-')
+    
+    # Create a flat list of all points from all paths
+    all_points = []
+    
+    for i in range(len(summary)):
+        # Get coordinates for each path
+        path_coords = skel_obj.path_coordinates(i)
+        # Add all points from this path to the flat list
+        for coord in path_coords:
+            all_points.append(tuple(coord))
+    
+    return all_points
+
+def get_high_intensity_pixels (mask, image):
+    skeleton = ski.morphology.skeletonize(mask)
         
+    ordered_skeleton_points = order_skeleton_points_skan(skeleton)
+    intensities = []
+    for x, y in ordered_skeleton_points:
+        intensities.append(image[x, y])
+        
+    # smooth intensities
+    window_size = 20
+    smoothed_intensities = np.convolve(intensities, np.ones(window_size), 'valid') / window_size
+        
+    # plot intensities
+    plt.plot(smoothed_intensities)
+    plt.show()
+
+
+
 def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
     Apply preprocessing to images.
@@ -748,14 +803,17 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     for im_num, image in enumerate(X):
         print(f'Processing image {im_num+1}/{len(X)}')
         
-        """# Create mask for synapses
+        # Create mask for synapses
         mask_synapses = creat_mask_synapse(image)
         
+        get_high_intensity_pixels(mask_synapses, image)
+        
+        
         # apply mask to original image
-        X_preprocessed[im_num] = image * mask_synapses"""
+        X_preprocessed[im_num] = image * mask_synapses
         
         
-        X_preprocessed[im_num] = ski.filters.frangi(image, black_ridges=False,sigmas=range(1, 5, 1),gamma=70)
+        
         
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
@@ -813,7 +871,7 @@ def first_neighbor_distance_histogram(positions, bins):
         return histo / sum_histo
     return histo
 
-def create_feature_vector(mask, image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AMELIORER
+def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AMELIORER
     """
     Create a feature vector from a preprocessed image.
     
@@ -836,12 +894,6 @@ def create_feature_vector(mask, image, n_features=N_FEAT, n_bins=N_BINS_FEAT): #
     # Threshold and label image
     threshold = threshold_otsu(image)
     binary_image = image > threshold
-    
-    
-    # apply mask to binary image
-    binary_image = binary_image * mask
-
-    
     labeled_components = label(binary_image)
     component_props = regionprops(labeled_components, intensity_image=image)
 
@@ -901,7 +953,7 @@ def create_feature_vector(mask, image, n_features=N_FEAT, n_bins=N_BINS_FEAT): #
 
     return feat, sel_component_props, labeled_components
 
-def get_feature_vector(mask, X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
+def get_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
     Create feature vectors from preprocessed images.
     
@@ -964,7 +1016,7 @@ def get_feature_vector(mask, X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n
             print(f'Extracting features for image {im_num+1}/{len(X)}')
             
             # Compute feature vector
-            feat, components, label_components = create_feature_vector(mask[im_num], image, n_features, n_bins)
+            feat, components, label_components = create_feature_vector(image, n_features, n_bins)
             
             # Save features in dictionary
             features['label'].append(y[im_num])
