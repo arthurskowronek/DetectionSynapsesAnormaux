@@ -32,11 +32,13 @@ MUTANT_DIR = DATA_DIR / '_Mutant'
 WT_DIR = DATA_DIR / '_WT'
 N_FEAT = 4
 N_BINS_FEAT = 20
-IMAGE_SIZE = (1024, 1024)
+NUMBER_OF_PIXELS = 1024
+IMAGE_SIZE = (NUMBER_OF_PIXELS, NUMBER_OF_PIXELS)
 MIN_AREA_COMPO = 5
 
 # Features
 MIN_AREA_FEATURE = 10
+MAX_LENGTH_OF_FEATURES = 10000
 
 # Training parameters
 N_RUNS = 100
@@ -789,13 +791,20 @@ def get_high_intensity_pixels (mask, image):
                 if x+i >= 0 and x+i < image.shape[0] and y+j >= 0 and y+j < image.shape[1]:
                     image[x+i, y+j] = 65535
         
-    display_image(image)
+    #display_image(image)
+    
+    # complete smoothed intensities until have MAX_LENGTH_OF_FEATURES values
+    while len(smoothed_intensities) < MAX_LENGTH_OF_FEATURES:
+        smoothed_intensities.append(0)
+   
+    derive = list(derive)
+    while len(derive) < MAX_LENGTH_OF_FEATURES:
+        derive.append(0)
+
     
     
     return smoothed_intensities, derive
     
-
-
 def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
     Apply preprocessing to images.
@@ -832,6 +841,9 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     
     print('Preprocessing images...')
     X_preprocessed = np.zeros_like(X, dtype=np.float64)
+    X_intensity = np.zeros((len(X), MAX_LENGTH_OF_FEATURES), dtype=np.float64)
+    X_derivative_intensity = np.zeros((len(X), MAX_LENGTH_OF_FEATURES), dtype=np.float64)
+    
     
     for im_num, image in enumerate(X):
         print(f'Processing image {im_num+1}/{len(X)}')
@@ -839,7 +851,7 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         # Create mask for synapses
         mask_synapses = creat_mask_synapse(image)
         
-        intensity, derivative_intensity = get_high_intensity_pixels(mask_synapses, image)
+        X_intensity[im_num], X_derivative_intensity[im_num] = get_high_intensity_pixels(mask_synapses, image)
         
         
         # apply mask to original image
@@ -854,7 +866,7 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     shutil.move(preprocess_file, DATASET_PKL_DIR)
     print(f'Preprocessing done and saved to {DATASET_PKL_DIR / preprocess_file}')
     
-    return X_preprocessed, intensity, derivative_intensity
+    return X_preprocessed, X_intensity, X_derivative_intensity
 
 
 ### ----------------------------- FEATURES ------------------------------ ###
