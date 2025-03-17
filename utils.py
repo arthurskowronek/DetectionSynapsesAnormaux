@@ -2,28 +2,21 @@ import os
 import shutil
 import joblib
 import datetime
-import cv2
 import skan
-import sys
 import numpy as np
 import pandas as pd
 from numpy.random import RandomState, MT19937, SeedSequence
 import matplotlib.pyplot as plt
 from pathlib import Path
+from boruta import BorutaPy
 import skimage as ski
-from skimage import exposure
 from skimage.io import imread
-from skimage.measure import label, regionprops
-from skimage.filters import threshold_otsu
 from skimage.transform import resize
 from skimage.color import label2rgb
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.cluster import KMeans
-
-from scipy.ndimage import distance_transform_edt
-from medpy.filter.smoothing import anisotropic_diffusion
+from sklearn.metrics import accuracy_score
 
 # Constants
 DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -32,7 +25,7 @@ DATA_DIR = Path('./data')
 DATASET_PKL_DIR = Path('./dataset_pkl')
 MUTANT_DIR = DATA_DIR / '_Mutant'
 WT_DIR = DATA_DIR / '_WT'
-N_FEAT = 4
+N_FEAT = 12
 N_BINS_FEAT = 20
 NUMBER_OF_PIXELS = 1024
 IMAGE_SIZE = (NUMBER_OF_PIXELS, NUMBER_OF_PIXELS)
@@ -927,7 +920,7 @@ def first_neighbor_distance_histogram(positions, bins):
         return histo / sum_histo
     return histo
 
-def create_feature_vector(image, component_props, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AMELIORER
+def create_feature_vector(image, component_props, n_bins=N_BINS_FEAT): # A AMELIORER
     """
     Create a feature vector from a preprocessed image.
     
@@ -949,7 +942,7 @@ def create_feature_vector(image, component_props, n_features=N_FEAT, n_bins=N_BI
     
     if not component_props:
         print("Warning: No components found in image")
-        return np.zeros(n_features * (n_bins - 1))
+        return np.zeros(N_FEAT * (n_bins - 1))
     
     # Extract properties
     
@@ -957,39 +950,69 @@ def create_feature_vector(image, component_props, n_features=N_FEAT, n_bins=N_BI
     ratio_axis = [x.axis_minor_length / x.axis_major_length if x.axis_major_length != 0 else 0 for x in component_props] 
     centroids = [x.centroid for x in component_props]
     extents = [x.extent for x in component_props]
-    
-    
+    area = [x.area for x in component_props] 
+    perimeter = [x.perimeter for x in component_props]
+    convex_area = [x.convex_area for x in component_props] 
+    eccentricity = [x.eccentricity for x in component_props]
+    solidity = [x.solidity for x in component_props]
+    mean_intensity = [x.mean_intensity for x in component_props]
+    max_intensity = [x.max_intensity for x in component_props]
+    min_intensity = [x.min_intensity for x in component_props]
+ 
+
+
     # Compute feature histograms
     feat = []
 
     # Major axis length histogram
-    feat1, bins = np.histogram(
-        axis_M_ls,
-        bins=np.linspace(start=0, stop=20, num=n_bins),
-        density=True
-    )
+    feat1, bins = np.histogram(axis_M_ls, bins=np.linspace(start=0, stop=20, num=n_bins), density=True)
     feat = np.append(feat, feat1 * (bins[1] - bins[0]))
 
     # Axis ratio histogram
-    feat1, bins = np.histogram(
-        ratio_axis,
-        bins=np.linspace(start=0, stop=1, num=n_bins),
-        density=True
-    )
+    feat1, bins = np.histogram(ratio_axis, bins=np.linspace(start=0, stop=1, num=n_bins), density=True)
     feat = np.append(feat, feat1 * (bins[1] - bins[0]))
 
     # Extent histogram
-    feat1, bins = np.histogram(
-        extents,
-        bins=np.linspace(start=0, stop=1, num=n_bins),
-        density=True
-    )
+    feat1, bins = np.histogram(extents, bins=np.linspace(start=0, stop=1, num=n_bins), density=True)
     feat = np.append(feat, feat1 * (bins[1] - bins[0]))
 
     # Distance to nearest neighbor histogram
-    bins = np.linspace(start=3, stop=30, num=n_bins)
+    bins = np.linspace(start=3, stop=20, num=n_bins)
     feat1 = first_neighbor_distance_histogram(np.array(centroids), bins)
     feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
+    # Area histogram ---------------------
+    feat1, bins = np.histogram(area, bins=np.linspace(start=0, stop=50, num=n_bins), density=True)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
+    # Perimeter histogram
+    feat1, bins = np.histogram(perimeter, bins=np.linspace(start=0, stop=50, num=n_bins), density=True)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
+    # Convex area histogram ---------------------
+    feat1, bins = np.histogram(convex_area, bins=np.linspace(start=0, stop=50, num=n_bins), density=True)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
+    # Eccentricity histogram
+    feat1, bins = np.histogram(eccentricity, bins=np.linspace(start=0, stop=1, num=n_bins), density=True)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
+    # Solidity histogram 
+    feat1, bins = np.histogram(solidity, bins=np.linspace(start=0, stop=1, num=n_bins), density=True)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
+    # Mean intensity histogram ---------------------
+    feat1, bins = np.histogram(mean_intensity, bins=np.linspace(start=0, stop=3000, num=n_bins), density=True)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
+    # Max intensity histogram ---------------------
+    feat1, bins = np.histogram(max_intensity, bins=np.linspace(start=0, stop=3000, num=n_bins), density=True)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
+    # Min intensity histogram ---------------------
+    feat1, bins = np.histogram(min_intensity, bins=np.linspace(start=0, stop=3000, num=n_bins), density=True)
+    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    
 
     return feat
 
@@ -1089,7 +1112,7 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, recompute=False, p
         
             
             # Compute feature vector
-            feat = create_feature_vector(image, component, n_features, n_bins)
+            feat = create_feature_vector(image, component, n_bins)
             
             # Save features in dictionary
             features['label'].append(y[im_num])
@@ -1100,9 +1123,10 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, recompute=False, p
             X_feat[im_num, :] = feat
 
         # Save features in pkl file
-        joblib.dump(features, features_file_name)
+        print('Features computed.')
+        """joblib.dump(features, features_file_name)
         shutil.move(features_file_name, DATASET_PKL_DIR)
-        print(f'Features computed and saved to {DATASET_PKL_DIR / features_file_name}')
+        print(f'Features computed and saved to {DATASET_PKL_DIR / features_file_name}')"""
 
         return X_feat, features
 
@@ -1110,63 +1134,59 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, recompute=False, p
 ### ----------------------------- LEARNING ------------------------------ ###
 ### --------------------------------------------------------------------- ###
 
-def train_model(X_features, y, seed=SEED, n_runs=N_RUNS, params=IN_PARAM): # A AMELIORER
-    """
-    Train a model on the feature vectors.
-    
-    Parameters
-    ----------
-    X_features : ndarray
-        Feature vectors
-    y : ndarray
-        Labels
-    seed : RandomState
-        Random state for reproducibility
-    n_runs : int
-        Number of runs
-    params : ndarray
-        Training parameters
-        
-    Returns
-    -------
-    float
-        Mean correct estimation
-    """
-    
+def train_model(X_features, y, seed=SEED, n_runs=N_RUNS, params=IN_PARAM):
+    """Train a model on the feature vectors."""
+
     print("Training model...")
-    
+
     # Convert labels to numeric
     unique_labels = np.unique(y)
     label_map = {label: i for i, label in enumerate(unique_labels)}
     y_numeric = np.array([label_map[label] for label in y])
-    
+
     # Initialize results
     correct_estimations = []
-    
+
     # Run multiple training iterations
     for run in range(n_runs):
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(
             X_features, y_numeric, test_size=0.3, random_state=seed
         )
-        
-        # Train model
+
+        # Apply Boruta feature selection
         clf = RandomForestClassifier(
             n_estimators=100,
             random_state=seed
         )
-        clf.fit(X_train, y_train)
+        """boruta_selector = BorutaPy(clf, n_estimators='auto', verbose=2, random_state=seed)
+        boruta_selector.fit(X_train, y_train)
+
+        X_train_transformed = boruta_selector.transform(X_train)
+        X_test_transformed = boruta_selector.transform(X_test)
+
+        # Train model with selected features
+        clf = RandomForestClassifier(
+            n_estimators=100,
+            random_state=seed
+        )"""
+        X_train_transformed = X_train
+        X_test_transformed = X_test
         
+        
+        clf.fit(X_train_transformed, y_train)
+
         # Evaluate
-        accuracy = clf.score(X_test, y_test)
+        y_pred = clf.predict(X_test_transformed)
+        accuracy = accuracy_score(y_test, y_pred)
         correct_estimations.append(accuracy)
-        
+
         # Update seed for next iteration
         seed = RandomState(seed.randint(0, 2**32 - 1))
-        
+
         if (run + 1) % 10 == 0:
             print(f"Completed {run + 1}/{n_runs} runs. Current mean accuracy: {np.mean(correct_estimations):.4f}")
-    
+
     mean_correct_estim = np.mean(correct_estimations)
     return mean_correct_estim
 

@@ -34,7 +34,7 @@ def pipeline():
     
     #show_errors(X_features, y, X_features, X, X_preprocessed, random_state=SEED)
     
-    #show_distribution_features(X_features, features)
+    show_distribution_features(features)
     
 
 def test():
