@@ -942,7 +942,10 @@ def create_feature_vector(image, component_props, n_bins=N_BINS_FEAT): # A AMELI
     
     if not component_props:
         print("Warning: No components found in image.")
-        return np.zeros(N_FEAT * (n_bins - 1))
+        return np.zeros(N_FEAT * (n_bins - 1) + 1)
+    
+    # Number of detected synapses
+    num_synapses = len(component_props)
 
     # Define feature extraction mapping
     feature_dict = {
@@ -975,7 +978,7 @@ def create_feature_vector(image, component_props, n_bins=N_BINS_FEAT): # A AMELI
     }
 
     # Compute histograms for all features
-    feat_vector = []
+    feat_vector = [num_synapses]
 
     for feature, values in feature_dict.items():
         bin_range = bin_ranges[feature]
@@ -1066,7 +1069,7 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, recompute=False, p
         print('Computing features...')
         
         # Initialize feature matrix
-        X_feat = np.zeros((len(X), n_features * (n_bins - 1))) 
+        X_feat = np.zeros((len(X), n_features * (n_bins - 1) + 1)) 
         features = {
             'description': 'C elegans images features',
             'label': [],
