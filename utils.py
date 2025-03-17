@@ -700,14 +700,15 @@ def create_mask_synapse(image): # A AMELIORER
         #p0, p1 = line
         #mask_synapses[p0[0]:p1[0], p0[1]:p1[1]] = 1
         
+    #display_image(image)
     
     # dilate image
-    selem = ski.morphology.disk(2)
+    """selem = ski.morphology.disk(2)
     image = ski.morphology.dilation(image, selem)
     
     
     # ----- CLOSE GAP BETWEEN EDGES -----
-    image = close_gap_between_edges(image, max_distance=10)
+    image = close_gap_between_edges(image, max_distance=10)"""
     
     
     return image
@@ -996,17 +997,15 @@ def get_regions_of_interest(coord, image, binary_mask):
     segmented = ski.segmentation.watershed(image, markers, mask=binary_mask)
 
     # Visualize segmentation
-    colored_labels = label2rgb(segmented, image=image, bg_label=0)
+    """colored_labels = label2rgb(segmented, image=image, bg_label=0)
 
     plt.figure(figsize=(8, 6))
     plt.imshow(colored_labels)
-    plt.title("Watershed Segmentation")
-    plt.show()
+    plt.title("Refined Watershed Segmentation")
+    plt.show()"""
 
     # Calculate region properties
     region_props = ski.measure.regionprops(segmented, intensity_image=image)
-
-    print(f'Number of detected synapses: {np.max(segmented)}')
 
     return region_props, segmented
 
