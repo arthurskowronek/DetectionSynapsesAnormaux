@@ -4,6 +4,7 @@ import joblib
 import datetime
 import cv2
 import skan
+import sys
 import numpy as np
 import pandas as pd
 from numpy.random import RandomState, MT19937, SeedSequence
@@ -829,9 +830,14 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     # Try to load existing preprocessing
     if not recompute:
         try:
-            X_preprocessed = joblib.load(DATASET_PKL_DIR / preprocess_file)
+            dict_preprocess = joblib.load(DATASET_PKL_DIR / preprocess_file)
+            X_preprocessed = dict_preprocess['X_preprocessed']
+            X_intensity = dict_preprocess['X_intensity']    
+            X_derivative_intensity = dict_preprocess['X_derivative_intensity']
+            maxima_coords = dict_preprocess['maxima_coords']
+            mask_synapses = dict_preprocess['mask_synapses']
             print('Preprocessing loaded from file.')
-            return X_preprocessed
+            return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses
         except FileNotFoundError:
             print('Preprocessing file not found. Recomputing...')
             recompute = True
@@ -864,7 +870,10 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
-    joblib.dump(X_preprocessed, preprocess_file)
+    dict_preprocess = {'X_preprocessed': X_preprocessed, 'X_intensity': X_intensity, 'X_derivative_intensity': X_derivative_intensity, 'maxima_coords': maxima_coords, 'mask_synapses': mask_synapses}
+    joblib.dump(dict_preprocess, preprocess_file)
+    
+    #joblib.dump(X_preprocessed, preprocess_file)
     shutil.move(preprocess_file, DATASET_PKL_DIR)
     print(f'Preprocessing done and saved to {DATASET_PKL_DIR / preprocess_file}')
     
@@ -943,10 +952,12 @@ def create_feature_vector(image, component_props, n_features=N_FEAT, n_bins=N_BI
         return np.zeros(n_features * (n_bins - 1))
     
     # Extract properties
+    
     axis_M_ls = [x.axis_major_length for x in component_props]
-    ratio_axis = [x.axis_minor_length/x.axis_major_length for x in component_props]
+    ratio_axis = [x.axis_minor_length / x.axis_major_length if x.axis_major_length != 0 else 0 for x in component_props] 
     centroids = [x.centroid for x in component_props]
     extents = [x.extent for x in component_props]
+    
     
     # Compute feature histograms
     feat = []
@@ -954,7 +965,7 @@ def create_feature_vector(image, component_props, n_features=N_FEAT, n_bins=N_BI
     # Major axis length histogram
     feat1, bins = np.histogram(
         axis_M_ls,
-        bins=np.linspace(start=3, stop=20, num=n_bins),
+        bins=np.linspace(start=0, stop=20, num=n_bins),
         density=True
     )
     feat = np.append(feat, feat1 * (bins[1] - bins[0]))

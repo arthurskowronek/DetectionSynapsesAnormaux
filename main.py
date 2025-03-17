@@ -3,8 +3,8 @@ from utils import *
 
 def pipeline():
     # Load dataset
-    filename_pkl_dataset = 'dataset_2025-03-10_08-05-48'
-    data = create_dataset(reimport_images=False) #, pkl_name=filename_pkl_dataset + '.pkl')
+    filename_pkl_dataset = 'dataset_2025-03-17_14-49-19'
+    data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Display dataset properties
     #show_dataset_properties(data)
@@ -13,8 +13,10 @@ def pipeline():
     X = np.array(data['data'])
     y = np.array(data['label'])
     
+    X_copy = X.copy()
+    
     # Preprocessing
-    X_preprocessed, X_intensity, X_derivative_intensity = get_preprocess_images(recompute=True, X=X) #, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # Display sample images
     """if len(X) > 0:
@@ -24,10 +26,10 @@ def pipeline():
         display_image(X_preprocessed[sample_idx], sample_idx, 'Frangi')"""
     
     # Compute features
-    #X_features, features = get_feature_vector(X_preprocessed, y, recompute=False, pkl_name=filename_pkl_dataset)
+    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, recompute=True)
     
     # Training
-    mean_corr_estim = train_model(X_derivative_intensity, y, SEED, N_RUNS, IN_PARAM)
+    mean_corr_estim = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
     print(f'Mean accuracy: {100*mean_corr_estim:.1f}%')
     
     #show_errors(X_features, y, X_features, X, X_preprocessed, random_state=SEED)
@@ -78,8 +80,8 @@ def test():
 
 if __name__ == "__main__":
     
-    #pipeline()
-    test()
+    pipeline()
+    #test()
     
     
     
