@@ -941,80 +941,54 @@ def create_feature_vector(image, component_props, n_bins=N_BINS_FEAT): # A AMELI
       
     
     if not component_props:
-        print("Warning: No components found in image")
+        print("Warning: No components found in image.")
         return np.zeros(N_FEAT * (n_bins - 1))
-    
-    # Extract properties
-    
-    axis_M_ls = [x.axis_major_length for x in component_props]
-    ratio_axis = [x.axis_minor_length / x.axis_major_length if x.axis_major_length != 0 else 0 for x in component_props] 
-    centroids = [x.centroid for x in component_props]
-    extents = [x.extent for x in component_props]
-    area = [x.area for x in component_props] 
-    perimeter = [x.perimeter for x in component_props]
-    convex_area = [x.convex_area for x in component_props] 
-    eccentricity = [x.eccentricity for x in component_props]
-    solidity = [x.solidity for x in component_props]
-    mean_intensity = [x.mean_intensity for x in component_props]
-    max_intensity = [x.max_intensity for x in component_props]
-    min_intensity = [x.min_intensity for x in component_props]
- 
 
+    # Define feature extraction mapping
+    feature_dict = {
+        "major_axis_length": [x.axis_major_length for x in component_props],
+        "axis_ratio": [x.axis_minor_length / x.axis_major_length if x.axis_major_length != 0 else 0 for x in component_props],
+        "extent": [x.extent for x in component_props],
+        "area": [x.area for x in component_props],
+        "perimeter": [x.perimeter for x in component_props],
+        "convex_area": [x.convex_area for x in component_props],
+        "eccentricity": [x.eccentricity for x in component_props],
+        "solidity": [x.solidity for x in component_props],
+        "mean_intensity": [x.mean_intensity for x in component_props],
+        "max_intensity": [x.max_intensity for x in component_props],
+        "min_intensity": [x.min_intensity for x in component_props]
+    }
 
-    # Compute feature histograms
-    feat = []
+    # Define histogram bin ranges for each feature
+    bin_ranges = {
+        "major_axis_length": (0, 20),
+        "axis_ratio": (0, 1),
+        "extent": (0, 1),
+        "area": (0, 50),
+        "perimeter": (0, 50),
+        "convex_area": (0, 50),
+        "eccentricity": (0, 1),
+        "solidity": (0, 1),
+        "mean_intensity": (0, 3000),
+        "max_intensity": (0, 3000),
+        "min_intensity": (0, 3000)
+    }
 
-    # Major axis length histogram
-    feat1, bins = np.histogram(axis_M_ls, bins=np.linspace(start=0, stop=20, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    # Compute histograms for all features
+    feat_vector = []
 
-    # Axis ratio histogram
-    feat1, bins = np.histogram(ratio_axis, bins=np.linspace(start=0, stop=1, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-
-    # Extent histogram
-    feat1, bins = np.histogram(extents, bins=np.linspace(start=0, stop=1, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
+    for feature, values in feature_dict.items():
+        bin_range = bin_ranges[feature]
+        hist, bins = np.histogram(values, bins=np.linspace(*bin_range, num=n_bins), density=True)
+        feat_vector.extend(hist * (bins[1] - bins[0]))
 
     # Distance to nearest neighbor histogram
-    bins = np.linspace(start=3, stop=20, num=n_bins)
-    feat1 = first_neighbor_distance_histogram(np.array(centroids), bins)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
-    # Area histogram ---------------------
-    feat1, bins = np.histogram(area, bins=np.linspace(start=0, stop=50, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
-    # Perimeter histogram
-    feat1, bins = np.histogram(perimeter, bins=np.linspace(start=0, stop=50, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
-    # Convex area histogram ---------------------
-    feat1, bins = np.histogram(convex_area, bins=np.linspace(start=0, stop=50, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
-    # Eccentricity histogram
-    feat1, bins = np.histogram(eccentricity, bins=np.linspace(start=0, stop=1, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
-    # Solidity histogram 
-    feat1, bins = np.histogram(solidity, bins=np.linspace(start=0, stop=1, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
-    # Mean intensity histogram ---------------------
-    feat1, bins = np.histogram(mean_intensity, bins=np.linspace(start=0, stop=3000, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
-    # Max intensity histogram ---------------------
-    feat1, bins = np.histogram(max_intensity, bins=np.linspace(start=0, stop=3000, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
-    # Min intensity histogram ---------------------
-    feat1, bins = np.histogram(min_intensity, bins=np.linspace(start=0, stop=3000, num=n_bins), density=True)
-    feat = np.append(feat, feat1 * (bins[1] - bins[0]))
-    
+    bins = np.linspace(3, 30, num=n_bins)
+    centroid_positions = np.array([x.centroid for x in component_props])
+    hist_nn = first_neighbor_distance_histogram(centroid_positions, bins)
+    feat_vector.extend(hist_nn * (bins[1] - bins[0]))
 
-    return feat
+    return np.array(feat_vector)
 
 def get_regions_of_interest(coord, image, binary_mask):
     # Initialize markers
