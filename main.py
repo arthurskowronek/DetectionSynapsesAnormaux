@@ -27,7 +27,7 @@ def pipeline():
     #X_features, features = get_feature_vector(X_preprocessed, y, recompute=False, pkl_name=filename_pkl_dataset)
     
     # Training
-    mean_corr_estim = train_model(X_intensity, y, SEED, N_RUNS, IN_PARAM)
+    mean_corr_estim = train_model(X_derivative_intensity, y, SEED, N_RUNS, IN_PARAM)
     print(f'Mean accuracy: {100*mean_corr_estim:.1f}%')
     
     #show_errors(X_features, y, X_features, X, X_preprocessed, random_state=SEED)
@@ -47,14 +47,15 @@ def test():
     X = np.array(data['data'])
     y = np.array(data['label'])
     
+    X_copy = X.copy()
     # Preprocessing
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    X_preprocessed, intensity, derivative_intensity = get_preprocess_images(recompute=True, X=X) #, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     #X_hist = get_histogram_vector(X_preprocessed)
                                       
     #display_6_images(X[0], X_preprocessed[0], X_hist[0], X[1], X_preprocessed[1], X_hist[1], ["Original Mutant", "Process Mutant", "Histogram Mutant", "Original Wild-Type", "Process Wild-Type", "Histogram Wild-Type"])
-    display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
+    #display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
     
 
     # Compute features
@@ -64,7 +65,7 @@ def test():
         print(f'Image {i} done')"""
         
         
-    X_features, features = get_feature_vector(X_preprocessed, y, recompute=True) # mask
+    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, recompute=True) # mask
     
     # Show features
     X_colored = colorize_image(X, features)
@@ -77,8 +78,8 @@ def test():
 
 if __name__ == "__main__":
     
-    pipeline()
-    #test()
+    #pipeline()
+    test()
     
     
     

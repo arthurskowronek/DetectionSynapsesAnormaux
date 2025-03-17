@@ -19,6 +19,7 @@ from skimage.color import label2rgb
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.cluster import KMeans
 
 from scipy.ndimage import distance_transform_edt
 from medpy.filter.smoothing import anisotropic_diffusion
@@ -34,7 +35,7 @@ N_FEAT = 4
 N_BINS_FEAT = 20
 NUMBER_OF_PIXELS = 1024
 IMAGE_SIZE = (NUMBER_OF_PIXELS, NUMBER_OF_PIXELS)
-MIN_AREA_COMPO = 5
+MIN_AREA_COMPO = 0
 
 # Features
 MIN_AREA_FEATURE = 10
@@ -610,7 +611,7 @@ def close_gap_between_edges(image, max_distance=5):
     closed = ski.morphology.erosion(dilated, selem)
     return closed
 
-def creat_mask_synapse(image): # A AMELIORER
+def create_mask_synapse(image): # A AMELIORER
     # ----- ADJUST CONTRAST ----- 
     #image = anisotropic_diffusion(image) # remove noise and enhance edges
     #image = exposure.adjust_gamma(image, gamma=3) 
@@ -701,7 +702,7 @@ def creat_mask_synapse(image): # A AMELIORER
         
     
     # dilate image
-    selem = ski.morphology.disk(5)
+    selem = ski.morphology.disk(2)
     image = ski.morphology.dilation(image, selem)
     
     
@@ -802,8 +803,7 @@ def get_high_intensity_pixels (mask, image):
         derive.append(0)
 
     
-    
-    return smoothed_intensities, derive
+    return smoothed_intensities, derive, maxima_coords
     
 def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
@@ -843,21 +843,22 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     X_preprocessed = np.zeros_like(X, dtype=np.float64)
     X_intensity = np.zeros((len(X), MAX_LENGTH_OF_FEATURES), dtype=np.float64)
     X_derivative_intensity = np.zeros((len(X), MAX_LENGTH_OF_FEATURES), dtype=np.float64)
+    maxima_coords = [None] * len(X)
+    mask_synapses = [None] * len(X)
     
     
     for im_num, image in enumerate(X):
         print(f'Processing image {im_num+1}/{len(X)}')
         
+        original_image = image.copy()
+        
         # Create mask for synapses
-        mask_synapses = creat_mask_synapse(image)
+        mask_synapses[im_num] = create_mask_synapse(image)
         
-        X_intensity[im_num], X_derivative_intensity[im_num] = get_high_intensity_pixels(mask_synapses, image)
-        
+        X_intensity[im_num], X_derivative_intensity[im_num], maxima_coords[im_num] = get_high_intensity_pixels(mask_synapses[im_num], image)
         
         # apply mask to original image
-        X_preprocessed[im_num] = image * mask_synapses
-        
-        
+        X_preprocessed[im_num] = original_image * mask_synapses[im_num]
         
         
     # Save preprocessing results
@@ -866,7 +867,7 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     shutil.move(preprocess_file, DATASET_PKL_DIR)
     print(f'Preprocessing done and saved to {DATASET_PKL_DIR / preprocess_file}')
     
-    return X_preprocessed, X_intensity, X_derivative_intensity
+    return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses
 
 
 ### ----------------------------- FEATURES ------------------------------ ###
@@ -916,7 +917,7 @@ def first_neighbor_distance_histogram(positions, bins):
         return histo / sum_histo
     return histo
 
-def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AMELIORER
+def create_feature_vector(image, component_props, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AMELIORER
     """
     Create a feature vector from a preprocessed image.
     
@@ -936,33 +937,15 @@ def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AME
     """
       
     
-    # Threshold and label image
-    threshold = threshold_otsu(image)
-    binary_image = image > threshold
-    labeled_components = label(binary_image)
-    component_props = regionprops(labeled_components, intensity_image=image)
-
-    # Filter components by size
-    sel_component_props = [x for x in component_props if x.area > MIN_AREA_COMPO]
-      
-    
-    """binary_image = image > 0 # TROUVER COMMENT AVOIR UN BON BINARY IMAGE
-    
-    labeled_components = label(binary_image)
-    component_props = regionprops(labeled_components, intensity_image=image)
-
-    # Filter components by size
-    sel_component_props = [x for x in component_props if x.area > MIN_AREA_COMPO]"""
-    
-    if not sel_component_props:
+    if not component_props:
         print("Warning: No components found in image")
         return np.zeros(n_features * (n_bins - 1))
     
     # Extract properties
-    axis_M_ls = [x.axis_major_length for x in sel_component_props]
-    ratio_axis = [x.axis_minor_length/x.axis_major_length for x in sel_component_props]
-    centroids = [x.centroid for x in sel_component_props]
-    extents = [x.extent for x in sel_component_props]
+    axis_M_ls = [x.axis_major_length for x in component_props]
+    ratio_axis = [x.axis_minor_length/x.axis_major_length for x in component_props]
+    centroids = [x.centroid for x in component_props]
+    extents = [x.extent for x in component_props]
     
     # Compute feature histograms
     feat = []
@@ -996,9 +979,38 @@ def create_feature_vector(image, n_features=N_FEAT, n_bins=N_BINS_FEAT): # A AME
     feat1 = first_neighbor_distance_histogram(np.array(centroids), bins)
     feat = np.append(feat, feat1 * (bins[1] - bins[0]))
 
-    return feat, sel_component_props, labeled_components
+    return feat
 
-def get_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
+def get_regions_of_interest(coord, image, binary_mask):
+    # Initialize markers
+    markers = np.zeros_like(image, dtype=np.int32)
+
+    # Assign unique labels to each centroid
+    for i, (x, y) in enumerate(coord, 1):  # Start at 1 (0 is background)
+        markers[int(x), int(y)] = i  
+
+    # Expand markers to avoid single-pixel problems
+    markers = ski.morphology.dilation(markers, ski.morphology.disk(3))  # Dilation to help watershed grow
+
+    # Apply watershed segmentation
+    segmented = ski.segmentation.watershed(image, markers, mask=binary_mask)
+
+    # Visualize segmentation
+    colored_labels = label2rgb(segmented, image=image, bg_label=0)
+
+    plt.figure(figsize=(8, 6))
+    plt.imshow(colored_labels)
+    plt.title("Watershed Segmentation")
+    plt.show()
+
+    # Calculate region properties
+    region_props = ski.measure.regionprops(segmented, intensity_image=image)
+
+    print(f'Number of detected synapses: {np.max(segmented)}')
+
+    return region_props, segmented
+
+def get_feature_vector(X, y, X_orig, max_images, mask_images, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
     Create feature vectors from preprocessed images.
     
@@ -1059,16 +1071,22 @@ def get_feature_vector(X, y, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_featu
 
         for im_num, image in enumerate(X):
             print(f'Extracting features for image {im_num+1}/{len(X)}')
+            image_original = X_orig[im_num]
+            maxima = max_images[im_num]
+            mask = mask_images[im_num]
+            
+            component, label = get_regions_of_interest(maxima, image_original, mask)
+        
             
             # Compute feature vector
-            feat, components, label_components = create_feature_vector(image, n_features, n_bins)
+            feat = create_feature_vector(image, component, n_features, n_bins)
             
             # Save features in dictionary
             features['label'].append(y[im_num])
             features['data'].append(feat)
             features['filename'].append(f"image_{im_num}")  # Fallback filename
-            features['components'].append(components)
-            features['label_components'].append(label_components)
+            features['components'].append(component)
+            features['label_components'].append(label)
             X_feat[im_num, :] = feat
 
         # Save features in pkl file
