@@ -618,20 +618,27 @@ def create_mask_synapse(image): # A AMELIORER
     # Meijering filter
     #image = ski.filters.meijering(image, sigmas=range(1, 8, 2), black_ridges=False) # quand on baisse le sigma max, on garde seulement les vaisseaux fins
     # Sato filter
-    #image = ski.filters.sato(image, sigmas=range(1, 8, 2), black_ridges=False)
+    image_sato = ski.filters.sato(image, sigmas=range(1, 3, 1), black_ridges=False)
     # Hessian filter
     #image = ski.filters.hessian(image,black_ridges=False,sigmas=range(1, 5, 1), alpha=2, beta=0.5, gamma=15)
     # Franji filter
     image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
     #image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=15)
         
+        
+    #display_image(0.9 * image + 0.1 * image_sato)
+    display_image(image)
+    
+    #image =  0.9 * image + 0.1 * image_sato
+        
     # gabors filter
     #real, imag = ski.filters.gabor(image, frequency=0.5)
     #image = real 
         
     # hysterisis thresholding
-    image = ski.filters.apply_hysteresis_threshold(image, 0.1, 0.2)
+    image = ski.filters.apply_hysteresis_threshold(image, 0.02, 0.15)
       
+    display_image(image) 
         
     # ----- DENOISE -----
     #image = ski.restoration.denoise_nl_means(image, h=0.7)
@@ -641,7 +648,7 @@ def create_mask_synapse(image): # A AMELIORER
         
 
     # ----- REMOVE SMALL OBJECTS -----
-    image = remove_small_objects(image, option=2, min_size_value=25)
+    """image = remove_small_objects(image, option=2, min_size_value=25)
         
     
     # keep only components that are more like a line than a blob
@@ -654,8 +661,26 @@ def create_mask_synapse(image): # A AMELIORER
             label_components[labeled_image == component.label] = 1
         else:
             label_components[labeled_image == component.label] = 0
-    image = label_components
+    image = label_components"""
         
+        
+    # get skeleton
+    skeleton = ski.morphology.skeletonize(image)
+
+    display_image(skeleton)
+    
+    # keep only components of skeleton that are longer than 10 pixels
+    labeled_image = ski.measure.label(skeleton)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        if component.major_axis_length > 50:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    image = label_components
+    
+    display_image(image)
         
     # ----- THRESHOLDING -----
     # threshold otsu
@@ -697,14 +722,14 @@ def create_mask_synapse(image): # A AMELIORER
         
     
     # dilate image
-    #selem = ski.morphology.disk(1)
-    #image = ski.morphology.dilation(image, selem)
+    selem = ski.morphology.disk(1)
+    image = ski.morphology.dilation(image, selem)
 
     
     # ----- CLOSE GAP BETWEEN EDGES -----
     #image = close_gap_between_edges(image, max_distance=10)
     
-    #display_image(image)
+    display_image(image)
     
     return image
      
@@ -1021,11 +1046,11 @@ def get_regions_of_interest(coord, image_original, binary_mask):
     segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
 
     # Visualize segmentation
-    colored_labels = label2rgb(segmented, image=image_original, bg_label=0)
+    """colored_labels = label2rgb(segmented, image=image_original, bg_label=0)
     plt.figure(figsize=(8, 6))
     plt.imshow(colored_labels)
     plt.title("Refined Watershed Segmentation")
-    plt.show()
+    plt.show()"""
     
     # Calculate region properties
     region_props = ski.measure.regionprops(segmented, intensity_image=image_original)
