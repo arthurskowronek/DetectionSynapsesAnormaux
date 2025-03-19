@@ -28,7 +28,7 @@ def pipeline():
         display_image(X_preprocessed[sample_idx], sample_idx, 'Frangi')"""
     
     # ---------- Compute features ----------
-    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, recompute=True)
+    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
     
     # Training
     #mean_corr_estim = train_model(X_features, y, model_type='random_forest', n_runs=100)
@@ -79,7 +79,7 @@ def pipeline():
     
 
 def test():
-    # Load dataset
+    # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
     data = create_dataset(reimport_images=True, test_random=True) #, pkl_name=filename_pkl_dataset + '.pkl')
     
@@ -91,7 +91,8 @@ def test():
     y = np.array(data['label'])
     
     X_copy = X.copy()
-    # Preprocessing
+    
+    # ---------- Preprocessing ----------
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
     X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
@@ -101,20 +102,21 @@ def test():
     #display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
     
 
-    # Compute features
+    # ---------- Compute features ----------
     """mask = np.zeros_like(X_preprocessed)
     for i in range(len(mask)):
         mask[i] = creat_mask_synapse(X[i])
         print(f'Image {i} done')"""
         
         
-    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, recompute=True) # mask
+    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True) # mask
+    # X_reduced = select_features(X_feat, y, method='lasso')
     
     # Show features
     X_colored = colorize_image(X, features)
     display_4_images(X[0], X_colored[0], X[1], X_colored[1], ["Original Mutant", "Colored Mutant", "Original Wild-Type", "Colored Wild-Type"])
 
-    # Training
+    # ---------- Training ----------
     #mean_accuracy = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
     #print(f'Mean accuracy: {100*mean_accuracy:.1f}%')
 
