@@ -35,7 +35,7 @@ MIN_AREA_COMPO = 0
 
 # Features
 MIN_AREA_FEATURE = 10
-MAX_LENGTH_OF_FEATURES = 10000
+MAX_LENGTH_OF_FEATURES = 20000
 
 # Training parameters
 N_RUNS = 100
@@ -636,6 +636,54 @@ def close_gap_between_edges(image, max_distance=5):
     return closed
 
 def create_mask_synapse(image):
+    
+    image_copy = image.copy()
+    
+    #display_image(image)
+    
+    # ------ MASK 1 ------
+    image = ski.filters.frangi(image_copy,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
+    image = ski.filters.apply_hysteresis_threshold(image, 0.01, 0.2)
+    # Remove small objects
+    image = remove_small_objects(image, option=2, min_size_value=25)
+    # keep only components that are more like a line than a blob
+    labeled_image = ski.measure.label(image)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        # if components is more like a line than a blob, keep it
+        if component.major_axis_length/component.minor_axis_length > 4:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    mask1 = label_components
+    
+    
+    # ------ MASK 2 ------
+    """image = ski.filters.frangi(image_copy,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
+    image = ski.filters.apply_hysteresis_threshold(image, 0.02, 0.15)
+    # get skeleton
+    skeleton = ski.morphology.skeletonize(image)
+    # display_image(skeleton)
+    # keep only components of skeleton that are longer than 10 pixels 
+    labeled_image = ski.measure.label(skeleton)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        if component.major_axis_length > 50:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    image = label_components  
+    # dilate image
+    selem = ski.morphology.disk(1)
+    mask2 = ski.morphology.dilation(image, selem)"""
+    
+    
+    image = mask1 #| mask2 # combine masks
+    
+    #display_image(image)
+    
     # ----- ADJUST CONTRAST ----- 
     #image = anisotropic_diffusion(image) # remove noise and enhance edges
     #image = exposure.adjust_gamma(image, gamma=3) 
@@ -651,7 +699,7 @@ def create_mask_synapse(image):
     # Hessian filter
     #image = ski.filters.hessian(image,black_ridges=False,sigmas=range(1, 5, 1), alpha=2, beta=0.5, gamma=15)
     # Franji filter
-    image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
+    #image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
     #image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=15)
         
         
@@ -667,9 +715,8 @@ def create_mask_synapse(image):
     #image = real 
         
     # hysterisis thresholding
-    image = ski.filters.apply_hysteresis_threshold(image, 0.02, 0.15)
+    #image = ski.filters.apply_hysteresis_threshold(image, 0.01, 0.2)
       
-    #display_image(image) 
         
     # ----- DENOISE -----
     #image = ski.restoration.denoise_nl_means(image, h=0.7)
@@ -679,11 +726,11 @@ def create_mask_synapse(image):
         
 
     # ----- REMOVE SMALL OBJECTS -----
-    """image = remove_small_objects(image, option=2, min_size_value=25)
+    #image = remove_small_objects(image, option=2, min_size_value=25)
         
     
     # keep only components that are more like a line than a blob
-    labeled_image = ski.measure.label(image)
+    """labeled_image = ski.measure.label(image)
     components = ski.measure.regionprops(labeled_image)
     label_components = np.zeros_like(labeled_image)
     for component in components:
@@ -695,7 +742,7 @@ def create_mask_synapse(image):
     image = label_components"""
         
         
-    # get skeleton
+    """# get skeleton
     skeleton = ski.morphology.skeletonize(image)
 
     #display_image(skeleton)
@@ -709,7 +756,7 @@ def create_mask_synapse(image):
             label_components[labeled_image == component.label] = 1
         else:
             label_components[labeled_image == component.label] = 0
-    image = label_components
+    image = label_components"""
     
     #display_image(image)
         
@@ -753,8 +800,8 @@ def create_mask_synapse(image):
         
     
     # dilate image
-    selem = ski.morphology.disk(1)
-    image = ski.morphology.dilation(image, selem)
+    #selem = ski.morphology.disk(1)
+    #image = ski.morphology.dilation(image, selem)
 
     
     # ----- CLOSE GAP BETWEEN EDGES -----
