@@ -1,4 +1,5 @@
 from utils import *
+from training import *
 
 
 def pipeline():
@@ -29,7 +30,9 @@ def pipeline():
     X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, recompute=True)
     
     # Training
-    mean_corr_estim = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
+    mean_corr_estim = train_model_V2(X_features, y, model_type='random_forest', n_runs=100)
+    # hist_gradient_boosting, svm_rbf, knn, decision_tree, mlp, random_forest, siamese_network
+
     print(f'Mean accuracy: {100*mean_corr_estim:.1f}%')
     
     #show_errors(X_features, y, X_features, X, X_preprocessed, random_state=SEED)
@@ -80,8 +83,8 @@ def test():
 
 if __name__ == "__main__":
     
-    #pipeline()
-    test()
+    pipeline()
+    #test()
     
     
     
