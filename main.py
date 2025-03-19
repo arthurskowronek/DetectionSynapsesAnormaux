@@ -16,7 +16,7 @@ def pipeline():
     X_copy = X.copy()
     
     # Preprocessing
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     # Display sample images
     """if len(X) > 0:
@@ -40,7 +40,7 @@ def pipeline():
 def test():
     # Load dataset
     filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    data = create_dataset(reimport_images=True) #, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=True, test_random=True) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Display dataset properties
     #show_dataset_properties(data)

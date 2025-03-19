@@ -3,6 +3,7 @@ import shutil
 import joblib
 import datetime
 import skan
+import random
 import numpy as np
 import pandas as pd
 from numpy.random import RandomState, MT19937, SeedSequence
@@ -73,7 +74,7 @@ def show_dataset_properties(data):
     print('------------------------------------------')
     print('')
 
-def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
+def create_dataset(reimport_images=False, test_random = False, pkl_name=DEFAULT_PKL_NAME):
     """
     Create a dataset from images in directory "data" and save it as a pkl file.
     
@@ -84,9 +85,12 @@ def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
         If False, load the existing pkl file.
     pkl_name : str
         Name of the pkl file to save/load the dataset.
+    test : bool
+        If True, select only 1 image of each type (Mutant and WildType) randomly.
+        If False, include all images.
         
     Returns
-    ------- 
+    -------
     data : dict
         Dictionary containing the dataset.
     """
@@ -148,18 +152,43 @@ def create_dataset(reimport_images=False, pkl_name=DEFAULT_PKL_NAME):
         
         print(f"Images imported. Mutant files: {count_mutant}, WildType files: {count_wildtype}")
         
-        # Load images into data dictionary
-        for label, directory in [("Mutant", MUTANT_DIR), ("WildType", WT_DIR)]:
-            for file in directory.glob('*.tif'):
+                    
+        # Temporary file lists for potential random selection
+        mutant_files = list(MUTANT_DIR.glob('*.tif'))
+        wildtype_files = list(WT_DIR.glob('*.tif'))
+        
+        # If test mode, select only 1 random image of each type
+        if test_random:
+            selected_files = []
+            
+            if mutant_files:
+                selected_files.append(("Mutant", random.choice(mutant_files)))
+            if wildtype_files:
+                selected_files.append(("WildType", random.choice(wildtype_files)))
+                
+            #print(f"Test mode: Selected {len(selected_files)} images (max 1 per type)")
+            
+            # Load only selected images
+            for label, file in selected_files:
                 try:
                     im = imread(file)
                     im = process_image_format(im)
-                    
                     data["label"].append(label)
                     data["filename"].append(file.name)
                     data["data"].append(im)
                 except Exception as e:
                     print(f"Error processing {file}: {e}")
+        else:
+            for label, directory in [("Mutant", MUTANT_DIR), ("WildType", WT_DIR)]:
+                for file in directory.glob('*.tif'):
+                    try:
+                        im = imread(file)
+                        im = process_image_format(im)
+                        data["label"].append(label)
+                        data["filename"].append(file.name)
+                        data["data"].append(im)
+                    except Exception as e:
+                        print(f"Error processing {file}: {e}")
         
         # Save dataset
         joblib.dump(data, pkl_name)
@@ -606,7 +635,7 @@ def close_gap_between_edges(image, max_distance=5):
     closed = ski.morphology.erosion(dilated, selem)
     return closed
 
-def create_mask_synapse(image): # A AMELIORER
+def create_mask_synapse(image):
     # ----- ADJUST CONTRAST ----- 
     #image = anisotropic_diffusion(image) # remove noise and enhance edges
     #image = exposure.adjust_gamma(image, gamma=3) 
@@ -616,9 +645,9 @@ def create_mask_synapse(image): # A AMELIORER
         
     # ----- TUBNESS FILTERS -----
     # Meijering filter
-    #image = ski.filters.meijering(image, sigmas=range(1, 8, 2), black_ridges=False) # quand on baisse le sigma max, on garde seulement les vaisseaux fins
+    #meij_image = ski.filters.meijering(image, sigmas=range(1, 8, 2), black_ridges=False) # quand on baisse le sigma max, on garde seulement les vaisseaux fins
     # Sato filter
-    image_sato = ski.filters.sato(image, sigmas=range(1, 3, 1), black_ridges=False)
+    #image_sato = ski.filters.sato(image, sigmas=range(1, 3, 1), black_ridges=False)
     # Hessian filter
     #image = ski.filters.hessian(image,black_ridges=False,sigmas=range(1, 5, 1), alpha=2, beta=0.5, gamma=15)
     # Franji filter
@@ -627,9 +656,11 @@ def create_mask_synapse(image): # A AMELIORER
         
         
     #display_image(0.9 * image + 0.1 * image_sato)
-    display_image(image)
+    #display_image(image)
     
-    #image =  0.9 * image + 0.1 * image_sato
+    #image =  0.9 * image + 0.1 * meij_image
+    
+    #display_image(image)
         
     # gabors filter
     #real, imag = ski.filters.gabor(image, frequency=0.5)
@@ -638,7 +669,7 @@ def create_mask_synapse(image): # A AMELIORER
     # hysterisis thresholding
     image = ski.filters.apply_hysteresis_threshold(image, 0.02, 0.15)
       
-    display_image(image) 
+    #display_image(image) 
         
     # ----- DENOISE -----
     #image = ski.restoration.denoise_nl_means(image, h=0.7)
@@ -667,7 +698,7 @@ def create_mask_synapse(image): # A AMELIORER
     # get skeleton
     skeleton = ski.morphology.skeletonize(image)
 
-    display_image(skeleton)
+    #display_image(skeleton)
     
     # keep only components of skeleton that are longer than 10 pixels
     labeled_image = ski.measure.label(skeleton)
@@ -680,7 +711,7 @@ def create_mask_synapse(image): # A AMELIORER
             label_components[labeled_image == component.label] = 0
     image = label_components
     
-    display_image(image)
+    #display_image(image)
         
     # ----- THRESHOLDING -----
     # threshold otsu
@@ -729,7 +760,7 @@ def create_mask_synapse(image): # A AMELIORER
     # ----- CLOSE GAP BETWEEN EDGES -----
     #image = close_gap_between_edges(image, max_distance=10)
     
-    display_image(image)
+    #display_image(image)
     
     return image
      
