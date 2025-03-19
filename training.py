@@ -169,7 +169,7 @@ class SiameseClassifier:
         
         return np.array(predictions)
 
-def train_model_V2(X_features, y, model_type='random_forest', n_runs=10, test_size=0.3, random_state=42):
+def train_model(X_features, y, model_type='random_forest', n_runs=10, test_size=0.3, random_state=42):
     """
     Train a model on the feature vectors with support for multiple classifier types.
     
