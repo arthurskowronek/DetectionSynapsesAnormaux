@@ -6,6 +6,7 @@ import skan
 import numpy as np
 import pandas as pd
 from numpy.random import RandomState, MT19937, SeedSequence
+import scipy
 import matplotlib.pyplot as plt
 from pathlib import Path
 from boruta import BorutaPy
@@ -694,16 +695,16 @@ def create_mask_synapse(image): # A AMELIORER
         #p0, p1 = line
         #mask_synapses[p0[0]:p1[0], p0[1]:p1[1]] = 1
         
-    #display_image(image)
     
     # dilate image
-    """selem = ski.morphology.disk(2)
-    image = ski.morphology.dilation(image, selem)
-    
+    #selem = ski.morphology.disk(1)
+    #image = ski.morphology.dilation(image, selem)
+
     
     # ----- CLOSE GAP BETWEEN EDGES -----
-    image = close_gap_between_edges(image, max_distance=10)"""
+    #image = close_gap_between_edges(image, max_distance=10)
     
+    #display_image(image)
     
     return image
      
@@ -797,6 +798,16 @@ def get_high_intensity_pixels (mask, image):
     while len(derive) < MAX_LENGTH_OF_FEATURES:
         derive.append(0)
 
+    """# get the distance map
+    distance_map = scipy.ndimage.distance_transform_edt(mask)  
+    # get the local maxima of the distance map
+    def detect_local_maxima(image):
+        # get the boolean mask of the local maxima
+        peaks_mask = ski.feature.peak_local_max(image, min_distance=4, threshold_abs=0)
+        # get the coordinates of the local maxima
+        coords = np.transpose(np.nonzero(peaks_mask))
+        return coords
+    maxima_coords = detect_local_maxima(distance_map)"""
     
     return smoothed_intensities, derive, maxima_coords
     
@@ -869,6 +880,8 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     #joblib.dump(X_preprocessed, preprocess_file)
     shutil.move(preprocess_file, DATASET_PKL_DIR)
     print(f'Preprocessing done and saved to {DATASET_PKL_DIR / preprocess_file}')
+    
+    # return le dictionnaire ? 
     
     return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses
 
@@ -993,30 +1006,30 @@ def create_feature_vector(image, component_props, n_bins=N_BINS_FEAT): # A AMELI
 
     return np.array(feat_vector)
 
-def get_regions_of_interest(coord, image, binary_mask):
+def get_regions_of_interest(coord, image_original, binary_mask):
     # Initialize markers
-    markers = np.zeros_like(image, dtype=np.int32)
+    image_markers = np.zeros_like(image_original, dtype=np.int32)
 
     # Assign unique labels to each centroid
     for i, (x, y) in enumerate(coord, 1):  # Start at 1 (0 is background)
-        markers[int(x), int(y)] = i  
+        image_markers[int(x), int(y)] = i + 100 # Add 100 to avoid overlap with binary mask
 
     # Expand markers to avoid single-pixel problems
-    markers = ski.morphology.dilation(markers, ski.morphology.disk(3))  # Dilation to help watershed grow
+    #image_markers = ski.morphology.dilation(image_markers, ski.morphology.disk(2))  # Dilation to help watershed grow
 
     # Apply watershed segmentation
-    segmented = ski.segmentation.watershed(image, markers, mask=binary_mask)
+    segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
 
     # Visualize segmentation
-    """colored_labels = label2rgb(segmented, image=image, bg_label=0)
-
+    colored_labels = label2rgb(segmented, image=image_original, bg_label=0)
     plt.figure(figsize=(8, 6))
     plt.imshow(colored_labels)
     plt.title("Refined Watershed Segmentation")
-    plt.show()"""
-
+    plt.show()
+    
     # Calculate region properties
-    region_props = ski.measure.regionprops(segmented, intensity_image=image)
+    region_props = ski.measure.regionprops(segmented, intensity_image=image_original)
+    
 
     return region_props, segmented
 
@@ -1084,9 +1097,9 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, recompute=False, p
             image_original = X_orig[im_num]
             maxima = max_images[im_num]
             mask = mask_images[im_num]
-            
-            component, label = get_regions_of_interest(maxima, image_original, mask)
         
+            # Get regions of interest
+            component, label = get_regions_of_interest(maxima, image_original, mask)
             
             # Compute feature vector
             feat = create_feature_vector(image, component, n_bins)

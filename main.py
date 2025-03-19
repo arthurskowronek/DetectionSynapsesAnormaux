@@ -40,7 +40,7 @@ def pipeline():
 def test():
     # Load dataset
     filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=True) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Display dataset properties
     #show_dataset_properties(data)
@@ -80,8 +80,8 @@ def test():
 
 if __name__ == "__main__":
     
-    pipeline()
-    #test()
+    #pipeline()
+    test()
     
     
     
