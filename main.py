@@ -3,6 +3,7 @@ from training import *
 from feature import *
 from preprocessing import *
 
+
 def pipeline():
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-03-19_19-32-21'
@@ -37,7 +38,7 @@ def pipeline():
     
     
     # ---------- Test all models and generate a comprehensive report ----------
-    model_types = ['hist_gradient_boosting', 'svm_rbf', 'knn', 'decision_tree', 'mlp', 'random_forest', 'siamese_network']
+    model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
     results = {}
 
     print("Starting model comparison...\n")
@@ -96,6 +97,7 @@ def test():
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
     X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
+    
     #X_hist = get_histogram_vector(X_preprocessed)
                                       
     #display_6_images(X[0], X_preprocessed[0], X_hist[0], X[1], X_preprocessed[1], X_hist[1], ["Original Mutant", "Process Mutant", "Histogram Mutant", "Original Wild-Type", "Process Wild-Type", "Histogram Wild-Type"])
@@ -125,6 +127,9 @@ if __name__ == "__main__":
     
     pipeline()
     #test()
+    
+    
+    
     
     
     
