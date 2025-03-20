@@ -4,7 +4,7 @@ from feature import *
 from preprocessing import *
 
 
-def pipeline():
+def pipeline(k_features):
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-03-19_19-32-21'
     data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
@@ -15,6 +15,11 @@ def pipeline():
     # Convert to numpy arrays
     X = np.array(data['data'])
     y = np.array(data['label'])
+    
+    # Convert labels to numeric
+    unique_labels = np.unique(y)
+    label_map = {label: i for i, label in enumerate(unique_labels)}
+    y = np.array([label_map[label] for label in y])
     
     X_copy = X.copy()
     
@@ -30,6 +35,13 @@ def pipeline():
     
     # ---------- Compute features ----------
     X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
+    
+    # ---------- Feature Selection ----------
+    number_features_before = X_features.shape[1]
+    # Here we choose the top k features 
+    X_features, selector = select_features(X_features, y, k=k_features) 
+    
+    number_features_after = X_features.shape[1]
     
     # Training
     #mean_corr_estim = train_model(X_features, y, model_type='random_forest', n_runs=100)
@@ -74,9 +86,15 @@ def pipeline():
     print("="*70)
     
     
+    print(f"Number of features before: {number_features_before}")
+    print(f"Number of features after: {number_features_after}")
+
+    
     #show_errors(X_features, y, X_features, X, X_preprocessed, random_state=SEED)
     
     #show_distribution_features(features)
+    
+    return results[best_model]*100
     
 
 def test():
@@ -125,7 +143,21 @@ def test():
 
 if __name__ == "__main__":
     
-    pipeline()
+    """accuracy = []
+    for i in range(55, 56):
+        accuracy.append(pipeline(i))
+    
+    # plot the accuracy
+    plt.plot(accuracy)
+    plt.xlabel('Number of features selected')
+    plt.ylabel('Accuracy')
+    plt.title('Accuracy vs Number of features selected')
+    plt.show()"""
+    
+    pipeline(55)
+    
+    
+    
     #test()
     
     

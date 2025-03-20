@@ -11,6 +11,7 @@ from boruta import BorutaPy
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LassoCV
 from scipy.signal import savgol_filter
+from sklearn.feature_selection import SelectKBest, f_classif
 
 from constants import *
 
@@ -546,7 +547,41 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
 
 # ---------- Feature selection ----------
 
-def select_features(X, y, method='lasso'):
+
+def select_features(X, y, k=10, method='kbest'):
+    """
+    Select the top k features using the ANOVA F-test.
+
+    Parameters:
+        X (array-like): Feature matrix of shape (n_samples, n_features).
+        y (array-like): Target vector.
+        k (int): Number of top features to select.
+
+    Returns:
+        X_new (array-like): The reduced feature matrix.
+        selector (SelectKBest object): The fitted feature selector.
+    """
+    if method == 'kbest':
+        selector = SelectKBest(score_func=f_classif, k=k)
+        X_new = selector.fit_transform(X, y)
+        return X_new, selector
+    elif method == 'boruta':
+        rf = RandomForestRegressor(n_jobs=-1, max_depth=5) 
+        boruta_selector = BorutaPy(rf, n_estimators='auto', verbose=2, random_state=42)
+        boruta_selector.fit(X, y)
+        return X[:, boruta_selector.support_], boruta_selector
+    elif method == 'lasso':
+        lasso = LassoCV(cv=5, random_state=42)
+        lasso.fit(X, y)
+        # Select features with non-zero coefficients
+        mask = lasso.coef_ != 0
+        print(f"Selected {np.sum(mask)} features out of {X.shape[1]}")
+        return X[:, mask], None
+    else:
+        print("Method must be 'kbest', 'boruta', or 'lasso'.")
+        return X, None
+
+def select_featuresV0(X, y, method='lasso'):
     """
     Reduce feature dimensions using feature selection.
     
