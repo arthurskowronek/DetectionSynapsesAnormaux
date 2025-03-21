@@ -6,8 +6,8 @@ from preprocessing import *
 
 def pipeline_optimisation(k_features):
     # ---------- Load dataset ----------
-    filename_pkl_dataset = 'dataset_2025-03-19_19-32-21'
-    data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
+    filename_pkl_dataset = 'dataset_2025-03-21_13-32-05'
+    data = create_dataset(reimport_images=True, test_random=False, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Display dataset properties
     #show_dataset_properties(data)
@@ -24,7 +24,7 @@ def pipeline_optimisation(k_features):
     X_copy = X.copy()
     
     # ---------- Preprocessing ----------
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     # Display sample images
     """if len(X) > 0:
@@ -39,7 +39,7 @@ def pipeline_optimisation(k_features):
     # ---------- Feature Selection ----------
     number_features_before = X_features.shape[1]
     # Here we choose the top k features 
-    X_features, selector = select_features(X_features, y, k=k_features) 
+    X_features, selector = select_features(X_features, y, k=k_features, method='boruta', verbose_features_selected=False) 
     
     number_features_after = X_features.shape[1]
     
@@ -98,9 +98,8 @@ def pipeline_optimisation(k_features):
  
 def pipeline():
     # ---------- Load dataset ----------
-    filename_pkl_dataset = 'dataset_2025-03-19_19-32-21'
+    filename_pkl_dataset = 'dataset_2025-03-21_13-32-05'
     data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
-    
     
     # ---------- Preprocessing ----------
     # Convert to numpy arrays
@@ -135,11 +134,10 @@ def pipeline():
     
     #show_distribution_features(features)
     
-
 def test():
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    data = create_dataset(reimport_images=True, test_random=True) #, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=True, test_random=True, augment_data=True) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Display dataset properties
     #show_dataset_properties(data)
@@ -193,9 +191,9 @@ if __name__ == "__main__":
     plt.title('Accuracy vs Number of features selected')
     plt.show()"""
     
-    #pipeline_optimisation(55)
+    pipeline_optimisation(55)
     
-    pipeline()
+    #pipeline()
     
     #test()
     

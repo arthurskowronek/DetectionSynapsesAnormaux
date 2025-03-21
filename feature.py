@@ -277,11 +277,9 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
             feat_vector.extend(hist_norm)
         else:
             print(f"Warning: Unknown basic feature '{feature}'. Skipping.")
-       
-    print(f"Length of basic features: {len(feat_vector)}")     
+          
     # ---------- Neighborhood features ----------
     if include_neighborhood:
-        print("Computing neighborhood features...")
         # Compute nearest neighbor histogram (spatial proximity of centroids)
         bins_nn = np.linspace(3, 30, num=n_bins)
         centroid_positions = np.array([prop.centroid for prop in component_props])
@@ -294,7 +292,6 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         except Exception as e:
             print(f"Warning: Could not compute nearest neighbor features: {e}")
     
-    print(f"Length of neighborhood features: {len(feat_vector)}")
     # For ROI-based features, extract all ROIs first
     roi_data = []
     for prop in component_props:
@@ -316,7 +313,6 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     # ---------- Intensity derivative ----------
     if include_intensity_deriv and roi_data:
         
-        print("Computing intensity derivative features...")
         # cut intensity to keep only non zero values
         intensity_cut = intensity[intensity > 0]
         # compute the roughness
@@ -324,10 +320,8 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         # Add to feature vector
         feat_vector.append(rough)
     
-    print(f"Length of intensity derivative features: {len(feat_vector)}")
     # ---------- Zernike moments ----------
     if include_zernike and roi_data:
-        print("Computing Zernike moment features...")
         zernike_radius = 10  # Adjust as needed
         zernike_list = []
         
@@ -352,10 +346,8 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         feat_vector.extend(std_zernike)
         feat_vector.extend(median_zernike)
     
-    print(f"Length of feature vector: {len(feat_vector)}")
     # ---------- Hu moments ----------
     if include_hu and roi_data:
-        print("Computing Hu moment features...")
         hu_list = []
         
         for roi in roi_data:
@@ -379,7 +371,6 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         feat_vector.extend(std_hu)
         feat_vector.extend(median_hu)
     
-    print(f"Length of feature vector: {len(feat_vector)}")
     # ---------- HOG features ----------
     if include_hog and roi_data:
         hog_list = []
@@ -409,8 +400,6 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         
         # Add to feature vector
         feat_vector.extend(mean_hog)
-    
-    print(f"Length of feature vector: {len(feat_vector)}")
     
     return np.array(feat_vector)
 

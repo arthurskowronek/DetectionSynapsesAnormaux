@@ -14,6 +14,8 @@ from skimage.color import label2rgb
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import HistGradientBoostingClassifier
 import seaborn as sns
+from skimage.transform import rotate
+from imageio import imwrite
 
 # Constants
 DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -66,7 +68,7 @@ def show_dataset_properties(data):
     print('------------------------------------------')
     print('')
 
-def create_dataset(reimport_images=False, test_random = False, pkl_name=DEFAULT_PKL_NAME):
+def create_dataset(reimport_images=False, test_random = False, data_augmentation = True, pkl_name=DEFAULT_PKL_NAME):
     """
     Create a dataset from images in directory "data" and save it as a pkl file.
     
@@ -135,12 +137,14 @@ def create_dataset(reimport_images=False, test_random = False, pkl_name=DEFAULT_
                 prefix = "Mut"
                 counter = count_mutant
                 count_mutant = copy_and_rename_files(subdir_path, target_dir, prefix, counter)
+                if data_augmentation: count_mutant = process_data_augmentation(subdir_path, target_dir, prefix, count_mutant)
                 
             elif subdir_name.startswith('WildType'):
                 target_dir = WT_DIR
                 prefix = "WT"
                 counter = count_wildtype
                 count_wildtype = copy_and_rename_files(subdir_path, target_dir, prefix, counter)
+                if data_augmentation: count_wildtype = process_data_augmentation(subdir_path, target_dir, prefix, count_wildtype)
         
         print(f"Images imported. Mutant files: {count_mutant}, WildType files: {count_wildtype}")
         
@@ -189,6 +193,64 @@ def create_dataset(reimport_images=False, test_random = False, pkl_name=DEFAULT_
         
         return data
 
+def process_data_augmentation(source_dir, target_dir, prefix, counter):
+    """ 
+    Process files in a directory by augmenting them.
+    
+    Images are augmented by applying random scaling, flipping, and rotation.
+    
+    """
+    
+    for file in source_dir.glob('*.tif'):
+        try:
+            # load image
+            im = imread(file)
+            im = process_image_format(im)
+            
+            # Generate random parameters for augmentation
+            angle = random.uniform(0, 360)  # Random rotation angle
+            do_flip = True  # Random flip decision
+            scale = random.uniform(0.8, 1.2)  # Random scale factor
+            
+            # Start with the original image
+            augmented_im = im.copy()
+            
+            # 1. Apply scaling
+            h, w = augmented_im.shape
+            new_h, new_w = int(h * scale), int(w * scale)
+            
+            # Resize image
+            augmented_im = resize(augmented_im, (new_h, new_w), mode='reflect', 
+                                  anti_aliasing=True, preserve_range=True).astype(im.dtype)
+            
+            # Handle size differences after scaling
+            if scale < 1:  # Pad smaller image
+                pad_h = (h - new_h) // 2
+                pad_w = (w - new_w) // 2
+                padded_im = np.zeros_like(im)
+                padded_im[pad_h:pad_h+new_h, pad_w:pad_w+new_w] = augmented_im
+                augmented_im = padded_im
+            else:  # Crop larger image
+                crop_h = (new_h - h) // 2
+                crop_w = (new_w - w) // 2
+                augmented_im = augmented_im[crop_h:crop_h+h, crop_w:crop_w+w]
+            
+            # 2. Apply flipping if chosen
+            if do_flip:
+                augmented_im = np.fliplr(augmented_im)
+            
+            # 3. Apply rotation
+            augmented_im = rotate(augmented_im, angle, mode='reflect', preserve_range=True).astype(im.dtype)
+            augmented_im = process_image_format(augmented_im)
+            
+            # Save augmented image
+            new_name = f"{prefix}{counter}_augmented.tif"
+            imwrite(target_dir / new_name, augmented_im)
+            counter += 1
+        except Exception as e:
+            print(f"Error processing {file}: {e}")
+    return counter   
+            
 def copy_and_rename_files(source_dir, target_dir, prefix, counter):
     """
     Process files in a directory by copying and renaming them.

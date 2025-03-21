@@ -173,7 +173,7 @@ class SiameseClassifier:
         
         return np.array(predictions)
 
-def train_model(X_features, y, model_type='random_forest', n_runs=10, test_size=0.3, random_state=13):
+def train_model(X_features, y, verbose_plot = False, model_type='random_forest', n_runs=10, test_size=0.3, random_state=26):
     """
     Train a model on the feature vectors with support for multiple classifier types.
     
@@ -286,11 +286,12 @@ def train_model(X_features, y, model_type='random_forest', n_runs=10, test_size=
         if (run + 1) % 5 == 0 or run == 0:
             print(f"Completed {run + 1}/{n_runs} runs. Current mean accuracy: {np.mean(correct_estimations):.4f}")
             
-        # if this is the last run, print the confidence histograms
-        if run == n_runs - 1:
-            plot_probability_histograms(y_pred_proba, class_names=['Mutant', 'Wildtype'])
-            plot_probability_boxplots(y_pred_proba, class_names=['Mutant', 'Wildtype'])
-            plot_probability_scatter(y_pred_proba, y_test, y_pred)
+        if verbose_plot :
+            # if this is the last run, print the confidence histograms
+            if run == n_runs - 1:
+                plot_probability_histograms(y_pred_proba, class_names=['Mutant', 'Wildtype'])
+                plot_probability_boxplots(y_pred_proba, class_names=['Mutant', 'Wildtype'])
+                plot_probability_scatter(y_pred_proba, y_test, y_pred)
             
     # Calculate and return mean accuracy
     mean_correct_estim = np.mean(correct_estimations)
