@@ -13,6 +13,7 @@ from skimage.transform import resize
 from skimage.color import label2rgb
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import HistGradientBoostingClassifier
+import seaborn as sns
 
 # Constants
 DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -592,3 +593,73 @@ def show_distribution_features(features, mutant_label="Mutant", wt_label="WildTy
     plt.ylabel("Average Feature Value")
     plt.show()
 
+def plot_probability_histograms(y_pred_proba, class_names=None):
+    """Plots histograms of predicted probabilities for each class."""
+
+    if y_pred_proba is None:
+        print("y_pred_proba is None. Cannot plot histograms.")
+        return
+
+    n_classes = y_pred_proba.shape[1]
+    plt.figure(figsize=(12, 6))
+
+    for i in range(n_classes):
+        plt.subplot(1, n_classes, i + 1)
+        sns.histplot(y_pred_proba[:, i], kde=True)
+        if  class_names is not None:
+            plt.title(f"Probability of Class: {class_names[i]}")
+        else:
+            plt.title(f"Probability of Class: {i}")
+        plt.xlabel("Probability")
+        plt.ylabel("Frequency")
+
+    plt.tight_layout()
+    plt.show()
+     
+def plot_probability_boxplots(y_pred_proba, class_names=None):
+    """Plots box plots of predicted probabilities for each class."""
+
+    if y_pred_proba is None:
+        print("y_pred_proba is None. Cannot plot box plots.")
+        return
+
+    n_classes = y_pred_proba.shape[1]
+    df_proba = pd.DataFrame(y_pred_proba, columns=class_names if class_names else [f"Class {i}" for i in range(n_classes)])
+
+    plt.figure(figsize=(8, 6))
+    sns.boxplot(data=df_proba)
+    plt.title("Predicted Probabilities by Class")
+    plt.ylabel("Probability")
+    plt.show()
+
+def plot_probability_scatter(y_pred_proba, y_test, y_pred):
+    """Scatter plots of predicted probabilities vs. true labels for both classes, highlighting incorrect predictions."""
+    if y_pred_proba is None:
+        print("y_pred_proba is None. Cannot plot probability scatter.")
+        return
+
+    errors = y_test != y_pred  # Boolean array indicating errors
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))  # Create 1 row, 2 columns of subplots
+
+    # Plot for Class 1 (Probability of Class 1)
+    correct_indices = np.where(~errors)[0]
+    axes[0].scatter(y_test[correct_indices], y_pred_proba[correct_indices, 1], c='blue', label='Correct')
+    incorrect_indices = np.where(errors)[0]
+    axes[0].scatter(y_test[incorrect_indices], y_pred_proba[incorrect_indices, 1], c='red', label='Incorrect')
+    axes[0].set_xlabel("True Labels")
+    axes[0].set_ylabel("Predicted Probability (Class 1)")
+    axes[0].set_title("Predicted Probabilities vs. True Labels (Class 1)")
+    axes[0].legend()
+
+    # Plot for Class 2 (Probability of Class 2)
+    axes[1].scatter(y_test[correct_indices], y_pred_proba[correct_indices, 0], c='blue', label='Correct') # class 0 instead of 2.
+    incorrect_indices = np.where(errors)[0]
+    axes[1].scatter(y_test[incorrect_indices], y_pred_proba[incorrect_indices, 0], c='red', label='Incorrect') #class 0 instead of 2.
+    axes[1].set_xlabel("True Labels")
+    axes[1].set_ylabel("Predicted Probability (Class 0)") #class 0 instead of 2.
+    axes[1].set_title("Predicted Probabilities vs. True Labels (Class 0)") #class 0 instead of 2.
+    axes[1].legend()
+
+    plt.tight_layout()  # Adjust subplot parameters to give specified padding
+    plt.show()

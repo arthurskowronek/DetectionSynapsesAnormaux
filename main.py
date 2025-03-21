@@ -4,7 +4,7 @@ from feature import *
 from preprocessing import *
 
 
-def pipeline(k_features):
+def pipeline_optimisation(k_features):
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-03-19_19-32-21'
     data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
@@ -95,6 +95,45 @@ def pipeline(k_features):
     #show_distribution_features(features)
     
     return results[best_model]*100
+ 
+def pipeline():
+    # ---------- Load dataset ----------
+    filename_pkl_dataset = 'dataset_2025-03-19_19-32-21'
+    data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
+    
+    
+    # ---------- Preprocessing ----------
+    # Convert to numpy arrays
+    X = np.array(data['data'])
+    y = np.array(data['label'])
+    X_copy = X.copy()
+    
+    # Convert labels to numeric
+    unique_labels = np.unique(y)
+    label_map = {label: i for i, label in enumerate(unique_labels)}
+    y = np.array([label_map[label] for label in y])
+    
+    # Preprocess images
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
+    
+    
+    # ---------- Compute features ----------
+    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
+    
+    
+    # ---------- Feature Selection ----------
+    # Choose the top k features 
+    X_features, selector = select_features(X_features, y, k=55, method='boruta', verbose_features_selected=True) 
+    
+    
+    # ---------- Training ----------
+    mean_corr_estim = train_model(X_features, y, model_type='svm_rbf', n_runs=100)
+
+    print(f'Mean accuracy: {100*mean_corr_estim:.1f}%')
+    
+    #show_errors(X_features, y, X_features, X, X_preprocessed, random_state=SEED)
+    
+    #show_distribution_features(features)
     
 
 def test():
@@ -154,9 +193,9 @@ if __name__ == "__main__":
     plt.title('Accuracy vs Number of features selected')
     plt.show()"""
     
-    pipeline(55)
+    #pipeline_optimisation(55)
     
-    
+    pipeline()
     
     #test()
     

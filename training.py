@@ -12,6 +12,10 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from numpy.random import RandomState
 
+
+from utils import *
+
+
 class SiameseNetwork(nn.Module):
     def __init__(self, input_dim, hidden_dim=128):
         super(SiameseNetwork, self).__init__()
@@ -169,7 +173,7 @@ class SiameseClassifier:
         
         return np.array(predictions)
 
-def train_model(X_features, y, model_type='random_forest', n_runs=10, test_size=0.3, random_state=42):
+def train_model(X_features, y, model_type='random_forest', n_runs=10, test_size=0.3, random_state=13):
     """
     Train a model on the feature vectors with support for multiple classifier types.
     
@@ -271,13 +275,23 @@ def train_model(X_features, y, model_type='random_forest', n_runs=10, test_size=
         accuracy = accuracy_score(y_test, y_pred)
         correct_estimations.append(accuracy)
         
+        # Show distribution of confidence in predictions
+        y_pred_proba = clf.predict_proba(X_test) if model_type != 'siamese_network' else None        
+        
+        
         # Update seed for next iteration
         seed = RandomState(seed.randint(0, 2**32 - 1))
         
         # Print progress
         if (run + 1) % 5 == 0 or run == 0:
             print(f"Completed {run + 1}/{n_runs} runs. Current mean accuracy: {np.mean(correct_estimations):.4f}")
-    
+            
+        # if this is the last run, print the confidence histograms
+        if run == n_runs - 1:
+            plot_probability_histograms(y_pred_proba, class_names=['Mutant', 'Wildtype'])
+            plot_probability_boxplots(y_pred_proba, class_names=['Mutant', 'Wildtype'])
+            plot_probability_scatter(y_pred_proba, y_test, y_pred)
+            
     # Calculate and return mean accuracy
     mean_correct_estim = np.mean(correct_estimations)
     print(f"Final mean accuracy: {mean_correct_estim:.4f}")

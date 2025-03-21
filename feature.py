@@ -88,7 +88,7 @@ def compute_hu_features(roi_mask):
     hu = pyfeats.hu_moments(roi_mask)
     return hu[0]
 
-def compute_hog_features(roi_intensity, pixels_per_cell=(8, 8), cells_per_block=(2, 2), orientations=9):
+def compute_hog_features(roi_intensity, pixels_per_cell=(2, 2), cells_per_block=(2, 2), orientations=9):
     """
     Compute HOG (Histogram of Oriented Gradients) features for an ROI.
     
@@ -108,8 +108,8 @@ def compute_hog_features(roi_intensity, pixels_per_cell=(8, 8), cells_per_block=
     ndarray
         HOG feature vector.
     """
-    # Resize ROI to a fixed size for uniformity (e.g., 64x64)
-    roi_resized = ski.transform.resize(roi_intensity, (64, 64), anti_aliasing=True)
+    # Resize ROI to a fixed size for uniformity (e.g., 12x12)
+    roi_resized = ski.transform.resize(roi_intensity, (12, 12), anti_aliasing=True)
     hog_desc = hog(roi_resized, orientations=orientations, pixels_per_cell=pixels_per_cell,
                    cells_per_block=cells_per_block, feature_vector=True)
     return hog_desc
@@ -277,9 +277,11 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
             feat_vector.extend(hist_norm)
         else:
             print(f"Warning: Unknown basic feature '{feature}'. Skipping.")
-            
+       
+    print(f"Length of basic features: {len(feat_vector)}")     
     # ---------- Neighborhood features ----------
     if include_neighborhood:
+        print("Computing neighborhood features...")
         # Compute nearest neighbor histogram (spatial proximity of centroids)
         bins_nn = np.linspace(3, 30, num=n_bins)
         centroid_positions = np.array([prop.centroid for prop in component_props])
@@ -292,6 +294,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         except Exception as e:
             print(f"Warning: Could not compute nearest neighbor features: {e}")
     
+    print(f"Length of neighborhood features: {len(feat_vector)}")
     # For ROI-based features, extract all ROIs first
     roi_data = []
     for prop in component_props:
@@ -313,6 +316,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     # ---------- Intensity derivative ----------
     if include_intensity_deriv and roi_data:
         
+        print("Computing intensity derivative features...")
         # cut intensity to keep only non zero values
         intensity_cut = intensity[intensity > 0]
         # compute the roughness
@@ -320,8 +324,10 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         # Add to feature vector
         feat_vector.append(rough)
     
+    print(f"Length of intensity derivative features: {len(feat_vector)}")
     # ---------- Zernike moments ----------
     if include_zernike and roi_data:
+        print("Computing Zernike moment features...")
         zernike_radius = 10  # Adjust as needed
         zernike_list = []
         
@@ -344,10 +350,12 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         # Add to feature vector
         feat_vector.extend(mean_zernike)
         feat_vector.extend(std_zernike)
-        #feat_vector.extend(median_zernike)
+        feat_vector.extend(median_zernike)
     
+    print(f"Length of feature vector: {len(feat_vector)}")
     # ---------- Hu moments ----------
     if include_hu and roi_data:
+        print("Computing Hu moment features...")
         hu_list = []
         
         for roi in roi_data:
@@ -371,6 +379,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         feat_vector.extend(std_hu)
         feat_vector.extend(median_hu)
     
+    print(f"Length of feature vector: {len(feat_vector)}")
     # ---------- HOG features ----------
     if include_hog and roi_data:
         hog_list = []
@@ -394,12 +403,14 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
             if hog_list:
                 mean_hog = np.mean(np.vstack(hog_list), axis=0)
             else:
-                mean_hog = np.zeros(1764)  # Default expected length for 64x64 image
+                mean_hog = np.zeros(36)  # Default expected length for 64x64 image
         else:
-            mean_hog = np.zeros(1764)  # Default expected length for 64x64 image
+            mean_hog = np.zeros(36)  # Default expected length for 64x64 image
         
         # Add to feature vector
         feat_vector.extend(mean_hog)
+    
+    print(f"Length of feature vector: {len(feat_vector)}")
     
     return np.array(feat_vector)
 
@@ -548,35 +559,59 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
 # ---------- Feature selection ----------
 
 
-def select_features(X, y, k=10, method='kbest'):
+import numpy as np
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.ensemble import RandomForestRegressor
+from boruta import BorutaPy
+from sklearn.linear_model import LassoCV
+
+def select_features(X, y, k=10, method='kbest', verbose_features_selected=False, feature_names=None):
     """
-    Select the top k features using the ANOVA F-test.
+    Select the top k features using specified method and show selected features.
 
     Parameters:
         X (array-like): Feature matrix of shape (n_samples, n_features).
         y (array-like): Target vector.
-        k (int): Number of top features to select.
+        k (int): Number of top features to select (for 'kbest').
+        method (str): Feature selection method ('kbest', 'boruta', 'lasso').
+        feature_names (list, optional): List of feature names.
 
     Returns:
         X_new (array-like): The reduced feature matrix.
-        selector (SelectKBest object): The fitted feature selector.
+        selector (object): The fitted feature selector.
+        selected_feature_names (list, optional): List of selected feature names.
     """
+    if feature_names is None:
+        feature_names = [f"feature_{i}" for i in range(X.shape[1])]
+
     if method == 'kbest':
         selector = SelectKBest(score_func=f_classif, k=k)
         X_new = selector.fit_transform(X, y)
+        selected_indices = selector.get_support(indices=True)
+        selected_feature_names = [feature_names[i] for i in selected_indices]
+        if verbose_features_selected : print(f"Selected features (kbest): {selected_feature_names}")
         return X_new, selector
+
     elif method == 'boruta':
-        rf = RandomForestRegressor(n_jobs=-1, max_depth=5) 
-        boruta_selector = BorutaPy(rf, n_estimators='auto', verbose=2, random_state=42)
+        rf = RandomForestRegressor(n_jobs=-1, max_depth=5, random_state=42)
+        boruta_selector = BorutaPy(rf, n_estimators='auto', verbose=1, random_state=42) 
         boruta_selector.fit(X, y)
-        return X[:, boruta_selector.support_], boruta_selector
+        selected_indices = boruta_selector.support_
+        selected_feature_names = [feature_names[i] for i, selected in enumerate(selected_indices) if selected]
+        if verbose_features_selected : print(f"Selected features (boruta): {selected_feature_names}")
+        return X[:, selected_indices], boruta_selector
+
     elif method == 'lasso':
         lasso = LassoCV(cv=5, random_state=42)
         lasso.fit(X, y)
-        # Select features with non-zero coefficients
         mask = lasso.coef_ != 0
-        print(f"Selected {np.sum(mask)} features out of {X.shape[1]}")
-        return X[:, mask], None
+        selected_indices = np.where(mask)[0]
+        selected_feature_names = [feature_names[i] for i in selected_indices]
+        if verbose_features_selected :
+            print(f"Selected {np.sum(mask)} features out of {X.shape[1]}")
+            print(f"Selected features (lasso): {selected_feature_names}")
+        return X[:, mask], lasso
+
     else:
         print("Method must be 'kbest', 'boruta', or 'lasso'.")
         return X, None
