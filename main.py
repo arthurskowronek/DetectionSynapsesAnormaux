@@ -2,6 +2,7 @@ from utils import *
 from training import *
 from feature import *
 from preprocessing import *
+from crible_functions import *
 
 
 def pipeline_optimisation(k_features):
@@ -99,7 +100,7 @@ def pipeline_optimisation(k_features):
 def pipeline():
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-03-21_13-32-05'
-    data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=True, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # ---------- Preprocessing ----------
     # Convert to numpy arrays
@@ -113,7 +114,7 @@ def pipeline():
     y = np.array([label_map[label] for label in y])
     
     # Preprocess images
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     
     # ---------- Compute features ----------
@@ -177,6 +178,95 @@ def test():
     #mean_accuracy = train_model(X_features, y, SEED, N_RUNS, IN_PARAM)
     #print(f'Mean accuracy: {100*mean_accuracy:.1f}%')
 
+def crible_genetique():
+    
+    # on a un dataset avec 1 mutant parmi X wild-type
+    # à chaque image est assigné sa proba d'être un mutant
+    # les images sont montrées dans l'ordre décroissant de proba
+    # on doit trouver le mutant le plus probable en un minimum d'images
+    # l'utilisateur doit dire si l'image est un mutant ou non
+    # on garde en mémoire les images déjà vues
+    # le modèle s'améliorer en fonction des réponses de l'utilisateur
+    
+    
+    # ---------- Load dataset ----------
+    # load dataset : à créer
+    data = create_dataset(reimport_images=True, test_random=False, data_augmentation=False)
+    
+    # ---------- Preprocessing ----------
+    # Convert to numpy arrays
+    X = np.array(data['data'])
+    y = np.array(data['label'])
+    
+    X_copy = X.copy()
+    
+    # ---------- Preprocessing ----------
+    #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
+    
+    # ---------- Compute features ----------
+    X_features, features = get_feature_vector(X_preprocessed, y, X_copy, maxima, mask, intensity, recompute=True)
+    
+    # ---------- Feature Selection ----------
+    # get indice of features to keep in 'models/selected_features.txt' file
+    with open('models/selected_features.txt', 'r') as f:
+        selected_features = f.read().splitlines()
+    selected_features = [int(i) for i in selected_features]
+    
+    X_features = X_features[:, selected_features]
+    
+    # ---------- Probabilities ----------
+    # load model from disk
+    clf = joblib.load('models/model.pkl')
+    # compute probabilities
+    # X_proba is a probability list of each image to be a mutant and an index list of the images
+    X_proba = np.zeros((len(X), 2))
+    for i in range(len(X)):            
+        proba = clf.predict_proba(X_features[i].reshape(1, -1)) # proba[0] = proba of being a wild-type, proba[1] = proba of being a mutant
+        X_proba[i][0] = proba[0][1]
+        X_proba[i][1] = i
+  
+            
+    # sort the images by probability
+    X_proba = X_proba[X_proba[:,0].argsort()[::-1]] # sort by descending order and keep the original index
+    
+    # Show images in order of probability and ask the user if it is a mutant or not
+    # the user's answers are stored in a list
+    # the images already seen are stored in a list
+    
+    images_seen = []
+    user_answers = []
+    not_seen = True
+    i = 0
+    while i < len(X) and not_seen:
+        
+        # show the image
+        # ask the user if it is a mutant or not
+        # store the answer
+        # store the image
+        
+        index = int(X_proba[i][1])
+        
+        print(f"Image {i+1}/{len(X)}")
+        print(f"Is this image a mutant ?")
+        display_image(X[index], index, 'Is this image a mutant ?')
+   
+        answer = input("y/n") 
+        
+        if answer == 'y':
+            user_answers.append(1)
+            not_seen = False
+        else:
+            user_answers.append(0)
+        
+        images_seen.append(int(X_proba[i][1]))
+        
+        print("\n")
+    
+    # ---------- Model improvement ----------
+    # the model is improved with the user's answers
+    # the model is saved on disk
+    
 
 if __name__ == "__main__":
     
@@ -191,11 +281,13 @@ if __name__ == "__main__":
     plt.title('Accuracy vs Number of features selected')
     plt.show()"""
     
-    pipeline_optimisation(55)
+    #pipeline_optimisation(55)
     
     #pipeline()
     
     #test()
+    
+    crible_genetique()
     
     
     

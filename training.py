@@ -268,7 +268,7 @@ def train_model(X_features, y, verbose_plot = False, model_type='random_forest',
         clf = model_config['cls'](**model_config['params'])
         
         # Train model
-        clf.fit(X_train, y_train)
+        clf.fit(X_train, y_train)    
         
         # Evaluate
         y_pred = clf.predict(X_test)
@@ -292,6 +292,13 @@ def train_model(X_features, y, verbose_plot = False, model_type='random_forest',
                 plot_probability_histograms(y_pred_proba, class_names=['Mutant', 'Wildtype'])
                 plot_probability_boxplots(y_pred_proba, class_names=['Mutant', 'Wildtype'])
                 plot_probability_scatter(y_pred_proba, y_test, y_pred)
+            
+    # save model
+    if model_type == 'siamese_network':
+        torch.save(clf.model.state_dict(), 'models/model.pth')
+    else:
+        joblib.dump(clf, 'models/model.pkl')
+        
             
     # Calculate and return mean accuracy
     mean_correct_estim = np.mean(correct_estimations)

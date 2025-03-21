@@ -13,6 +13,7 @@ from sklearn.linear_model import LassoCV
 from scipy.signal import savgol_filter
 from sklearn.feature_selection import SelectKBest, f_classif
 
+
 from constants import *
 
 
@@ -547,13 +548,6 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
 
 # ---------- Feature selection ----------
 
-
-import numpy as np
-from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.ensemble import RandomForestRegressor
-from boruta import BorutaPy
-from sklearn.linear_model import LassoCV
-
 def select_features(X, y, k=10, method='kbest', verbose_features_selected=False, feature_names=None):
     """
     Select the top k features using specified method and show selected features.
@@ -578,6 +572,14 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
         X_new = selector.fit_transform(X, y)
         selected_indices = selector.get_support(indices=True)
         selected_feature_names = [feature_names[i] for i in selected_indices]
+        # save indices of selected features in a file "selected_features.txt" in 'models' folder
+        with open('models/selected_features.txt', 'w') as f:
+            counter = 0
+            for item in selected_indices:
+                if item == True:
+                    # write the indices of the selected features
+                    f.write("%s\n" % counter)
+                counter += 1
         if verbose_features_selected : print(f"Selected features (kbest): {selected_feature_names}")
         return X_new, selector
 
@@ -588,6 +590,14 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
         selected_indices = boruta_selector.support_
         selected_feature_names = [feature_names[i] for i, selected in enumerate(selected_indices) if selected]
         if verbose_features_selected : print(f"Selected features (boruta): {selected_feature_names}")
+        # save indices of selected features in a file "selected_features.txt" in 'models' folder
+        with open('models/selected_features.txt', 'w') as f:
+            counter = 0
+            for item in selected_indices:
+                if item == True:
+                    # write the indices of the selected features
+                    f.write("%s\n" % counter)
+                counter += 1
         return X[:, selected_indices], boruta_selector
 
     elif method == 'lasso':
@@ -596,6 +606,14 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
         mask = lasso.coef_ != 0
         selected_indices = np.where(mask)[0]
         selected_feature_names = [feature_names[i] for i in selected_indices]
+        # save indices of selected features in a file "selected_features.txt" in 'models' folder
+        with open('models/selected_features.txt', 'w') as f:
+            counter = 0
+            for item in selected_indices:
+                if item == True:
+                    # write the indices of the selected features
+                    f.write("%s\n" % counter)
+                counter += 1
         if verbose_features_selected :
             print(f"Selected {np.sum(mask)} features out of {X.shape[1]}")
             print(f"Selected features (lasso): {selected_feature_names}")
