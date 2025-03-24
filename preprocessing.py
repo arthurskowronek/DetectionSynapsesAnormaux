@@ -345,6 +345,13 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
     preprocess_file = f'{Path(pkl_name).stem}_preprocessing.pkl'
     
+    # if name already exists, add a number to the name
+    i = 1
+    while (DATASET_PKL_DIR / preprocess_file).exists():
+        preprocess_file = f'{Path(pkl_name).stem}_preprocessing_{i}.pkl'
+        i += 1
+        
+    
     # Try to load existing preprocessing
     if not recompute:
         try:
@@ -384,7 +391,8 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         
         # apply mask to original image
         X_preprocessed[im_num] = original_image * mask_synapses[im_num]
-        
+    
+    
         
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)

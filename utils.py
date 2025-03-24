@@ -68,7 +68,7 @@ def show_dataset_properties(data):
     print('------------------------------------------')
     print('')
 
-def create_dataset(reimport_images=False, test_random = False, data_augmentation = True, pkl_name=DEFAULT_PKL_NAME):
+def create_dataset(reimport_images=False, test_random_mutant = False, test_random_wildtype = False, data_augmentation = True, pkl_name=DEFAULT_PKL_NAME):
     """
     Create a dataset from images in directory "data" and save it as a pkl file.
     
@@ -91,6 +91,11 @@ def create_dataset(reimport_images=False, test_random = False, data_augmentation
     
     # Ensure the pkl directory exists
     DATASET_PKL_DIR.mkdir(exist_ok=True)
+    
+    i=1
+    while (DATASET_PKL_DIR / pkl_name).exists():
+        pkl_name = f'dataset_{DATE}_{i}.pkl'
+        i += 1
     
     # Load existing dataset if not reimporting
     if not reimport_images:
@@ -154,13 +159,19 @@ def create_dataset(reimport_images=False, test_random = False, data_augmentation
         wildtype_files = list(WT_DIR.glob('*.tif'))
         
         # If test mode, select only 1 random image of each type
-        if test_random:
+        if test_random_mutant or test_random_wildtype:
             selected_files = []
             
-            if mutant_files:
-                selected_files.append(("Mutant", random.choice(mutant_files)))
-            if wildtype_files:
-                selected_files.append(("WildType", random.choice(wildtype_files)))
+            if test_random_mutant:
+                if mutant_files:
+                    selected_files.append(("Mutant", random.choice(mutant_files)))
+            else:
+                selected_files.extend([("Mutant", file) for file in mutant_files])
+            if test_random_wildtype:
+                if wildtype_files:
+                    selected_files.append(("WildType", random.choice(wildtype_files)))
+            else:
+                selected_files.extend([("WildType", file) for file in wildtype_files])
                 
             #print(f"Test mode: Selected {len(selected_files)} images (max 1 per type)")
             
@@ -187,6 +198,7 @@ def create_dataset(reimport_images=False, test_random = False, data_augmentation
                         print(f"Error processing {file}: {e}")
         
         # Save dataset
+        
         joblib.dump(data, pkl_name)
         shutil.move(pkl_name, DATASET_PKL_DIR)
         print(f"Dataset saved as {DATASET_PKL_DIR / pkl_name}")

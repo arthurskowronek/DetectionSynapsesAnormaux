@@ -471,6 +471,12 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
     DATASET_PKL_DIR.mkdir(exist_ok=True)
     features_file_name = f'{Path(pkl_name).stem}_features.pkl'
     
+    # if name already exists, add a number to the name
+    i = 1
+    while (DATASET_PKL_DIR / features_file_name).exists():
+        features_file_name = f'{Path(pkl_name).stem}_{i}_features.pkl'
+        i += 1
+    
     if not recompute:
         try:
             features = joblib.load(DATASET_PKL_DIR / features_file_name)

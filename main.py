@@ -191,7 +191,7 @@ def crible_genetique():
     
     # ---------- Load dataset ----------
     # load dataset : à créer
-    data = create_dataset(reimport_images=True, test_random=False, data_augmentation=False)
+    data = create_dataset(reimport_images=True, test_random_mutant=True, test_random_wildtype=False, data_augmentation=False)
     
     # ---------- Preprocessing ----------
     # Convert to numpy arrays
@@ -247,25 +247,36 @@ def crible_genetique():
         
         index = int(X_proba[i][1])
         
-        print(f"Image {i+1}/{len(X)}")
+        # Display image and ask user if it is a mutant
+        """print(f"Image {i+1}/{len(X)}")
         print(f"Is this image a mutant ?")
         display_image(X[index], index, 'Is this image a mutant ?')
-   
         answer = input("y/n") 
-        
         if answer == 'y':
             user_answers.append(1)
             not_seen = False
         else:
             user_answers.append(0)
-        
         images_seen.append(int(X_proba[i][1]))
+        print("\n")"""
         
-        print("\n")
+        # check if the image is a mutant
+        # if it is a mutant, the loop stops
+        
+        if y[index] == 'Mutant':
+            print("Mutant found")
+            not_seen = False
+        else:
+            print(f"Mutant not found. Image {i+1}/{len(X)}")
+        
+        i += 1
+        
+    print(f"Mutant found in {i} images")
     
+    
+    return i
     # ---------- Model improvement ----------
     # the model is improved with the user's answers
-    # the model is saved on disk
     
 
 if __name__ == "__main__":
@@ -287,7 +298,29 @@ if __name__ == "__main__":
     
     #test()
     
-    crible_genetique()
+    number_images_seen = []
+    for i in range(20):
+        number_images_seen.append(crible_genetique())
+    
+    print(f"Average number of images seen: {np.mean(number_images_seen)}")
+    
+    # show histogram of the number of images seen
+    plt.hist(number_images_seen, bins=20)
+    plt.xlabel('Number of images seen')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of the number of images seen')
+    plt.show()
+    
+    # plot the number of images seen
+    plt.plot(number_images_seen)
+    plt.xlabel('Number of trials')
+    plt.ylabel('Number of images seen')
+    plt.title('Number of images seen vs Number of trials')
+    plt.show()
+    
+    # show the number of images seen
+    print(number_images_seen)
+    
     
     
     
