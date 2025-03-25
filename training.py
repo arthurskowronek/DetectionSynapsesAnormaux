@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, learning_curve
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.svm import SVC
@@ -218,6 +218,11 @@ def train_model(X_features, y, verbose_plot = False, model_type='random_forest',
     
     # Initialize results and seed
     correct_estimations = []
+    learning_curves = {
+        'train_sizes': [],
+        'train_scores': [],
+        'test_scores': []
+    }
     seed = RandomState(random_state) if isinstance(random_state, int) else random_state
     
     # Define model configurations
@@ -267,6 +272,19 @@ def train_model(X_features, y, verbose_plot = False, model_type='random_forest',
         model_config = model_configs[model_type]
         clf = model_config['cls'](**model_config['params'])
         
+        # Compute learning curve
+        train_sizes, train_scores, test_scores = learning_curve(
+            clf, X_train, y_train, 
+            train_sizes=np.linspace(0.1, 1.0, 5),  # 5 different training set sizes
+            cv=5,  # 5-fold cross-validation
+            scoring='accuracy'
+        )
+        
+        # Store learning curve data
+        learning_curves['train_sizes'].append(train_sizes)
+        learning_curves['train_scores'].append(train_scores)
+        learning_curves['test_scores'].append(test_scores)
+        
         # Train model
         clf.fit(X_train, y_train)    
         
@@ -292,6 +310,42 @@ def train_model(X_features, y, verbose_plot = False, model_type='random_forest',
                 plot_probability_histograms(y_pred_proba, class_names=['Mutant', 'Wildtype'])
                 plot_probability_boxplots(y_pred_proba, class_names=['Mutant', 'Wildtype'])
                 plot_probability_scatter(y_pred_proba, y_test, y_pred)
+                
+                # Learning Curve Visualization
+                plt.figure(figsize=(10, 6))
+                
+                # Average train and test scores across runs
+                avg_train_scores = np.mean(learning_curves['train_scores'], axis=0)
+                avg_test_scores = np.mean(learning_curves['test_scores'], axis=0)
+                
+                # Standard deviation of train and test scores
+                std_train_scores = np.std(learning_curves['train_scores'], axis=0)
+                std_test_scores = np.std(learning_curves['test_scores'], axis=0)
+                
+                avg_train_sizes = np.mean(learning_curves['train_sizes'], axis=0)
+                
+                # Plot learning curves with error bands
+                plt.plot(avg_train_sizes, avg_train_scores.mean(axis=1), 
+                         label='Training Score', color='blue', marker='o')
+                plt.fill_between(avg_train_sizes, 
+                                 avg_train_scores.mean(axis=1) - std_train_scores.mean(axis=1),
+                                 avg_train_scores.mean(axis=1) + std_train_scores.mean(axis=1), 
+                                 alpha=0.15, color='blue')
+                
+                plt.plot(avg_train_sizes, avg_test_scores.mean(axis=1), 
+                         label='Validation Score', color='red', marker='s')
+                plt.fill_between(avg_train_sizes, 
+                                 avg_test_scores.mean(axis=1) - std_test_scores.mean(axis=1),
+                                 avg_test_scores.mean(axis=1) + std_test_scores.mean(axis=1), 
+                                 alpha=0.15, color='red')
+                
+                plt.title(f'Learning Curves - {model_type.replace("_", " ").title()}')
+                plt.xlabel('Training Set Size')
+                plt.ylabel('Accuracy')
+                plt.legend(loc='lower right')
+                plt.grid(True)
+                plt.tight_layout()
+                plt.show()
             
     # save model
     if model_type == 'siamese_network':
@@ -304,3 +358,5 @@ def train_model(X_features, y, verbose_plot = False, model_type='random_forest',
     mean_correct_estim = np.mean(correct_estimations)
     print(f"Final mean accuracy: {mean_correct_estim:.4f}")
     return mean_correct_estim
+
+

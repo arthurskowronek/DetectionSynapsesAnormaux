@@ -8,7 +8,7 @@ from crible_functions import *
 def pipeline_optimisation(k_features):
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-03-21_13-32-05'
-    data = create_dataset(reimport_images=True, test_random=False, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=True, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Display dataset properties
     #show_dataset_properties(data)
@@ -40,7 +40,7 @@ def pipeline_optimisation(k_features):
     # ---------- Feature Selection ----------
     number_features_before = X_features.shape[1]
     # Here we choose the top k features 
-    X_features, selector = select_features(X_features, y, k=k_features, method='boruta', verbose_features_selected=False) 
+    #X_features, selector = select_features(X_features, y, k=k_features, method='boruta', verbose_features_selected=False) 
     
     number_features_after = X_features.shape[1]
     
@@ -100,7 +100,7 @@ def pipeline_optimisation(k_features):
 def pipeline():
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-03-21_13-32-05'
-    data = create_dataset(reimport_images=True, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=True, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # ---------- Preprocessing ----------
     # Convert to numpy arrays
@@ -123,11 +123,11 @@ def pipeline():
     
     # ---------- Feature Selection ----------
     # Choose the top k features 
-    X_features, selector = select_features(X_features, y, k=55, method='boruta', verbose_features_selected=True) 
+    #X_features, selector = select_features(X_features, y, k=55, method='boruta', verbose_features_selected=True) 
     
     
     # ---------- Training ----------
-    mean_corr_estim = train_model(X_features, y, model_type='svm_rbf', n_runs=100)
+    mean_corr_estim = train_model(X_features, y, model_type='random_forest', n_runs=100, verbose_plot=True)
 
     print(f'Mean accuracy: {100*mean_corr_estim:.1f}%')
     
@@ -294,11 +294,14 @@ if __name__ == "__main__":
     
     #pipeline_optimisation(55)
     
-    #pipeline()
+    pipeline()
     
     #test()
     
-    number_images_seen = []
+    
+    
+    
+    """number_images_seen = []
     for i in range(20):
         number_images_seen.append(crible_genetique())
     
@@ -319,7 +322,7 @@ if __name__ == "__main__":
     plt.show()
     
     # show the number of images seen
-    print(number_images_seen)
+    print(number_images_seen)"""
     
     
     
