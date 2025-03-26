@@ -249,7 +249,7 @@ def train_model(X_features, y, verbose_plot = False, model_type='random_forest',
         },
         'random_forest': {
             'cls': RandomForestClassifier,
-            'params': {'n_estimators': 100, 'random_state': seed}
+            'params': {'n_estimators': 10, 'random_state': seed}
         },
         'siamese_network': {
             'cls': SiameseClassifier,
