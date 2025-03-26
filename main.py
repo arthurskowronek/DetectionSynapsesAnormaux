@@ -73,11 +73,12 @@ def test_model_accuracy(model_types):
     
     print(f"Number of features before: {number_features_before}")
     print(f"Number of features after: {number_features_after}")
+    
        
 def test_pipeline():
     # ---------- Load dataset ----------
-    filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    data = create_dataset(reimport_images=True, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
+    filename_pkl_dataset = 'dataset_56'
+    data = create_dataset(reimport_images=True, test_random_mutant=True, test_random_wildtype=True, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Display dataset properties
     #show_dataset_properties(data)
@@ -96,7 +97,7 @@ def test_pipeline():
     #X_hist = get_histogram_vector(X_preprocessed)
                                       
     #display_6_images(X[0], X_preprocessed[0], X_hist[0], X[1], X_preprocessed[1], X_hist[1], ["Original Mutant", "Process Mutant", "Histogram Mutant", "Original Wild-Type", "Process Wild-Type", "Histogram Wild-Type"])
-    #display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
+    display_4_images(X[0], X_preprocessed[0], X[1], X_preprocessed[1], ["Original Mutant", "Process Mutant", "Original Wild-Type", "Process Wild-Type"])
     
 
     # ---------- Compute features ----------
@@ -108,6 +109,7 @@ def test_pipeline():
         
     X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True) # mask
     # X_reduced = select_features(X_feat, y, method='lasso')
+    
     
     # Show features
     X_colored = colorize_image(X, features)
@@ -216,10 +218,10 @@ def crible_genetique():
     
 
 if __name__ == "__main__":
-    
+        
     # ---------- Test model accuracy ----------
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
-    model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
+    model_types = ['random_forest']
     #test_model_accuracy(model_types)
     
     

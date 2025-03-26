@@ -12,6 +12,9 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LassoCV
 from scipy.signal import savgol_filter
 from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+from skimage.color import label2rgb
 
 
 from constants import *
@@ -405,6 +408,91 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     return np.array(feat_vector)
 
 def get_regions_of_interest(coord, image_original, binary_mask):
+    # Step 1: Initial rough segmentation
+    image_markers = np.zeros_like(image_original, dtype=np.int32)
+    for i, (x, y) in enumerate(coord, 1):  # Start at 1 (0 is background)
+        image_markers[int(x), int(y)] = i + 100  # Offset markers to avoid overlap
+    
+    rough_segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
+    refined_segmented = np.zeros_like(rough_segmented)
+
+    # Step 2: Process each region
+    for region in ski.measure.regionprops(rough_segmented, intensity_image=image_original):
+        minr, minc, maxr, maxc = region.bbox  # Get bounding box of region
+        mask = (rough_segmented[minr:maxr, minc:maxc] == region.label)  # Extract the region
+        
+        # Step 3: Compute mean boundary intensity
+        boundary = ski.morphology.dilation(mask, ski.morphology.disk(1)) ^ mask  # Find boundary pixels
+        if image_original[minr:maxr, minc:maxc][boundary].size > 0:
+            mean_boundary_intensity = np.mean(image_original[minr:maxr, minc:maxc][boundary])
+            #print(f"Mean boundary intensity for region {region.label}: {mean_boundary_intensity}")
+        else:
+            mean_boundary_intensity = 0
+            print(f"Warning: No boundary pixels found for region {region.label}")
+            continue
+
+        # Step 4: Construct new window
+        new_window = image_original[minr:maxr, minc:maxc].copy()
+        new_window[~mask] = mean_boundary_intensity  # Replace background with mean boundary intensity
+
+        # Step 5: Apply K-means
+        I = new_window / new_window.max()  # Normalize intensities
+        B = mask.astype(float) * 0  # Binary weight
+        features = np.column_stack((I.flatten(), B.flatten()))  # 2D feature space
+        
+        # Show feature space
+        """plt.figure(figsize=(8, 6))
+        plt.scatter(features[:, 0], features[:, 1], c=features[:, 0], cmap='viridis')
+        plt.title(f"Feature space for region {region.label}")
+        plt.xlabel("Intensity")
+        plt.ylabel("Binary weight")
+        plt.show()"""
+        
+        if features.shape[0] < 2:
+            #print(f"Warning: Not enough features for region {region.label}. Skipping.")
+            labels = np.zeros_like(features)
+            continue
+        
+        kmeans = KMeans(n_clusters=2, random_state=0, n_init=10)
+        labels = kmeans.fit_predict(features)
+
+        # Step 6: Determine foreground and update segmentation
+        refined_region = labels.reshape(mask.shape)
+        foreground_label = np.argmax([np.mean(I[refined_region == 0]), np.mean(I[refined_region == 1])])
+
+        refined_mask = np.zeros_like(mask, dtype=np.int32)
+        refined_mask[refined_region == foreground_label] = region.label  # Keep the correct label
+
+        # Place refined region in final segmented image
+        refined_segmented[minr:maxr, minc:maxc][refined_mask > 0] = region.label
+        
+        
+        """# Create a figure with a specified size for the combined image
+        fig, axes = plt.subplots(1, 3, figsize=(24, 8)) # 1 row, 3 columns
+        # Visualize region (first subplot)
+        axes[0].imshow(mask)
+        axes[0].set_title(f"Region {region.label}")
+        axes[0].axis('off') # Turn off axis labels and ticks
+        # Visualize new window (second subplot)
+        axes[1].imshow(new_window)
+        axes[1].set_title(f"New window for region {region.label} with mean boundary intensity for background")
+        axes[1].axis('off')
+        # Visualize refined region (third subplot)
+        axes[2].imshow(refined_mask)
+        axes[2].set_title(f"Refined region {region.label}")
+        axes[2].axis('off')
+        # Adjust layout to prevent overlapping titles
+        plt.tight_layout()
+        # Show the combined image
+        plt.show()"""
+
+
+    # Step 7: Compute refined region properties
+    region_props = ski.measure.regionprops(refined_segmented, intensity_image=image_original)
+
+    return region_props, refined_segmented
+
+def get_regions_of_interestV0(coord, image_original, binary_mask):
     """
     Segment the image via watershed given initial coordinates.
     
@@ -432,6 +520,9 @@ def get_regions_of_interest(coord, image_original, binary_mask):
     
     segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
     region_props = ski.measure.regionprops(segmented, intensity_image=image_original)
+    
+
+    
     
     # Visualize segmentation
     """colored_labels = label2rgb(segmented, image=image_original, bg_label=0)
@@ -628,37 +719,4 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
     else:
         print("Method must be 'kbest', 'boruta', or 'lasso'.")
         return X, None
-
-def select_featuresV0(X, y, method='lasso'):
-    """
-    Reduce feature dimensions using feature selection.
-    
-    Parameters
-    ----------
-    X : ndarray
-        Feature matrix.
-    y : ndarray
-        Labels.
-    method : str
-        'boruta' to use Boruta or 'lasso' to use LASSO.
-        
-    Returns
-    -------
-    ndarray
-        Reduced feature matrix.
-    """
-    if method == 'boruta':
-        rf = RandomForestRegressor(n_jobs=-1, max_depth=5)
-        boruta_selector = BorutaPy(rf, n_estimators='auto', verbose=2, random_state=42)
-        boruta_selector.fit(X, y)
-        return boruta_selector.transform(X)
-    elif method == 'lasso':
-        lasso = LassoCV(cv=5, random_state=42)
-        lasso.fit(X, y)
-        # Select features with non-zero coefficients
-        mask = lasso.coef_ != 0
-        print(f"Selected {np.sum(mask)} features out of {X.shape[1]}")
-        return X[:, mask]
-    else:
-        raise ValueError("Method must be 'boruta' or 'lasso'.")
 

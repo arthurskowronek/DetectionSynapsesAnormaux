@@ -353,6 +353,11 @@ def train_model(X_features, y, verbose_plot = False, model_type='random_forest',
     else:
         joblib.dump(clf, 'models/model.pkl')
         
+    """import shap 
+    model = clf
+    explainer = shap.TreeExplainer(model) 
+    shap_values = explainer.shap_values(X_features) 
+    shap.summary_plot(shap_values, X_features)"""
             
     # Calculate and return mean accuracy
     mean_correct_estim = np.mean(correct_estimations)
