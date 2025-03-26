@@ -211,8 +211,8 @@ def create_mask_synapse(image):
         
     
     # dilate image
-    #selem = ski.morphology.disk(1)
-    #image = ski.morphology.dilation(image, selem)
+    selem = ski.morphology.disk(1)
+    image = ski.morphology.dilation(image, selem)
 
     
     # ----- CLOSE GAP BETWEEN EDGES -----
@@ -259,69 +259,124 @@ def order_skeleton_points_skan(skeleton):
     return all_points
 
 def get_high_intensity_pixels (mask, image):
-    skeleton = ski.morphology.skeletonize(mask)
+    
+    method = 1
+    # ------------------------ METHOD 1 --------------------------------
+    if method == 1:
         
-    ordered_skeleton_points = order_skeleton_points_skan(skeleton)
-    intensities = []
-    for x, y in ordered_skeleton_points:
-        intensities.append(image[x, y])
+        skeleton = ski.morphology.skeletonize(mask)
+            
+        ordered_skeleton_points = order_skeleton_points_skan(skeleton)
+        intensities = []
+        for x, y in ordered_skeleton_points:
+            intensities.append(image[x, y])
+            
+        # smooth intensities
+        smoothed_intensities = intensities
+        #window_size = 1
+        #smoothed_intensities = np.convolve(intensities, np.ones(window_size), 'valid') / window_size 
         
-    # smooth intensities
-    smoothed_intensities = intensities
-    #window_size = 1
-    #smoothed_intensities = np.convolve(intensities, np.ones(window_size), 'valid') / window_size 
-    
-    # get the index of the local maxima. A maxima is a point where the intensity is greater than its neighbors (2 left and 2 right)
-    maxima = []
-    for i in range(2, len(smoothed_intensities)-2):
-        if smoothed_intensities[i] > smoothed_intensities[i-1] and smoothed_intensities[i] > smoothed_intensities[i-2] and smoothed_intensities[i] > smoothed_intensities[i+1] and smoothed_intensities[i] > smoothed_intensities[i+2]:
-            maxima.append(i)
-    
-    # plot the maxima
-    #plt.plot(smoothed_intensities)
-    #plt.plot(maxima, [smoothed_intensities[i] for i in maxima], 'ro')
-    #plt.show() 
-    
-    # x is a vector from 1 to the length of the smoothed intensities
-    x = np.arange(len(smoothed_intensities))
-    
-    # get the plot to the derive of the smoothed intensities
-    derive = np.gradient(smoothed_intensities, x)
-    #plt.plot(derive)
-    #plt.show()
-    
-    # get pixel coordinates of the maxima
-    maxima_coords = []
-    for i in maxima:
-        maxima_coords.append(ordered_skeleton_points[i])
+        # get the index of the local maxima. A maxima is a point where the intensity is greater than its neighbors (2 left and 2 right)
+        maxima = []
+        for i in range(2, len(smoothed_intensities)-2):
+            if smoothed_intensities[i] > smoothed_intensities[i-1] and smoothed_intensities[i] > smoothed_intensities[i-2] and smoothed_intensities[i] > smoothed_intensities[i+1] and smoothed_intensities[i] > smoothed_intensities[i+2]:
+                maxima.append(i)
         
-    # plot the maxima on the image
-    for x, y in maxima_coords:
-        for i in range(-1,1):
-            for j in range(-1,1):
-                if x+i >= 0 and x+i < image.shape[0] and y+j >= 0 and y+j < image.shape[1]:
-                    image[x+i, y+j] = 65535
+        # plot the maxima
+        """plt.plot(smoothed_intensities)
+        plt.plot(maxima, [smoothed_intensities[i] for i in maxima], 'ro')
+        plt.show() """
         
-    #display_image(image)
-    
-    # complete smoothed intensities until have MAX_LENGTH_OF_FEATURES values
-    while len(smoothed_intensities) < MAX_LENGTH_OF_FEATURES:
-        smoothed_intensities.append(0)
-   
-    derive = list(derive)
-    while len(derive) < MAX_LENGTH_OF_FEATURES:
-        derive.append(0)
+        # x is a vector from 1 to the length of the smoothed intensities
+        x = np.arange(len(smoothed_intensities))
+        
+        # get the plot to the derive of the smoothed intensities
+        derive = np.gradient(smoothed_intensities, x)
 
-    """# get the distance map
-    distance_map = scipy.ndimage.distance_transform_edt(mask)  
-    # get the local maxima of the distance map
-    def detect_local_maxima(image):
-        # get the boolean mask of the local maxima
-        peaks_mask = ski.feature.peak_local_max(image, min_distance=4, threshold_abs=0)
-        # get the coordinates of the local maxima
-        coords = np.transpose(np.nonzero(peaks_mask))
-        return coords
-    maxima_coords = detect_local_maxima(distance_map)"""
+        # get pixel coordinates of the maxima
+        maxima_coords = []
+        for i in maxima:
+            maxima_coords.append(ordered_skeleton_points[i])
+            
+            
+        # plot the maxima on the image
+        """for x, y in maxima_coords:
+            for i in range(-1,1):
+                for j in range(-1,1):
+                    if x+i >= 0 and x+i < image.shape[0] and y+j >= 0 and y+j < image.shape[1]:
+                        image[x+i, y+j] = 65535
+            
+        display_image(image)"""
+        
+        # complete smoothed intensities until have MAX_LENGTH_OF_FEATURES values
+        while len(smoothed_intensities) < MAX_LENGTH_OF_FEATURES:
+            smoothed_intensities.append(0)
+    
+        derive = list(derive)
+        while len(derive) < MAX_LENGTH_OF_FEATURES:
+            derive.append(0)
+
+        # get the distance map
+        """distance_map = scipy.ndimage.distance_transform_edt(mask)  
+        # get the local maxima of the distance map
+        def detect_local_maxima(image):
+            # get the boolean mask of the local maxima
+            peaks_mask = ski.feature.peak_local_max(image, min_distance=4, threshold_abs=0)
+            # get the coordinates of the local maxima
+            coords = np.transpose(np.nonzero(peaks_mask))
+            return coords
+        maxima_coords = detect_local_maxima(distance_map)"""
+        
+    # ------------------------ METHOD 2 --------------------------------
+    else: # ne marche pas
+        smoothed_intensities = []
+        derive = []
+        # complete smoothed intensities until have MAX_LENGTH_OF_FEATURES values
+        while len(smoothed_intensities) < MAX_LENGTH_OF_FEATURES:
+            smoothed_intensities.append(0)
+        derive = list(derive)
+        while len(derive) < MAX_LENGTH_OF_FEATURES:
+            derive.append(0)
+
+        
+        # apply mask to original image
+        image = image * mask
+        
+        # Step 1: Apply Hessian Matrix to Image
+        hessian_elems = ski.feature.hessian_matrix(image, sigma=2, order='rc')
+        hessian_eigenvals = ski.feature.hessian_matrix_eigvals(hessian_elems)
+        
+        # Step 2: Threshold negative eigenvalues
+        eigenvalue1, eigenvalue2 = hessian_eigenvals[0], hessian_eigenvals[1]
+        
+        # Keep points where both eigenvalues are negative
+        negative_eigenvalue_mask = (eigenvalue1 < 0) & (eigenvalue2 < 0)
+        
+        # Step 3: Find local maxima in the negative eigenvalue mask (intensity peaks)
+        hessian_response = np.abs(eigenvalue1)  # or use the largest eigenvalue for intensity peaks
+        local_maxima = ski.feature.peak_local_max(hessian_response, min_distance=3, threshold_abs=np.mean(hessian_response))
+        
+        # Step 4: Filter maxima based on the mask and thresholding condition
+        maxima_coords = [(x, y) for x, y in local_maxima if mask[x, y] > 0 and negative_eigenvalue_mask[x, y]]
+
+
+        # Plot original vs. Hessian response
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        axes[0].imshow(image, cmap='gray')
+        axes[0].set_title('Original Image')
+        axes[1].imshow(hessian_response, cmap='inferno')
+        axes[1].set_title('Hessian Response')
+        plt.show()
+        
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(image, cmap='gray')
+        ax.scatter([y for x, y in maxima_coords], [x for x, y in maxima_coords], 
+                color='red', s=20, label="Detected Centers")
+        ax.set_title("Synapse Centers Overlaid on Image")
+        ax.legend()
+        plt.show()
+    
     
     return smoothed_intensities, derive, maxima_coords
     

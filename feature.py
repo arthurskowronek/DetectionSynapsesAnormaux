@@ -407,7 +407,58 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     
     return np.array(feat_vector)
 
+def get_synapse_centers_using_hessian(region, image, sigma=2):
+    """
+    Detects synapse centers in a region using the Hessian matrix.
+    
+    Parameters:
+    - region: Binary mask of the region.
+    - image: Original grayscale image.
+    - sigma: Scale for Hessian filter.
+    
+    Returns:
+    - List of (x, y) coordinates for synapse centers.
+    """
+    # Compute Hessian matrix of the region
+    hessian_elems = ski.feature.hessian_matrix(image, sigma=sigma, order='rc')
+    hessian_eigenvals = ski.feature.hessian_matrix_eigvals(hessian_elems)
+    
+    # Step 2: Threshold negative eigenvalues
+    eigenvalue1, eigenvalue2 = hessian_eigenvals[0], hessian_eigenvals[1]
+        
+    # Keep points where both eigenvalues are negative
+    negative_eigenvalue_mask = (eigenvalue1 < 0) & (eigenvalue2 < 0)
+        
+    # Step 3: Find local maxima in the negative eigenvalue mask (intensity peaks)
+    hessian_response = np.abs(eigenvalue1)  # or use the largest eigenvalue for intensity peaks
+    local_maxima = ski.feature.peak_local_max(hessian_response, min_distance=3, exclude_border=False)
+        
+    # Step 4: Filter maxima based on the mask and thresholding condition
+    synapse_centers = [(x, y) for x, y in local_maxima if region[x, y] > 0 and negative_eigenvalue_mask[x, y]]
+    
+    # Plot original vs. Hessian response
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].imshow(image, cmap='gray')
+    axes[0].set_title('Original Image')
+    axes[1].imshow(hessian_response, cmap='inferno')
+    axes[1].set_title('Hessian Response')
+    plt.show()
+        
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.imshow(image, cmap='gray')
+    ax.scatter([y for x, y in synapse_centers], [x for x, y in synapse_centers], 
+            color='red', s=20, label="Detected Centers")
+    ax.set_title("Synapse Centers Overlaid on Image")
+    ax.legend()
+    plt.show()
+    
+    return synapse_centers
+
 def get_regions_of_interest(coord, image_original, binary_mask):
+    
+    #print(f"Detected {len(coord)} synapse centers")
+    
     # Step 1: Initial rough segmentation
     image_markers = np.zeros_like(image_original, dtype=np.int32)
     for i, (x, y) in enumerate(coord, 1):  # Start at 1 (0 is background)
@@ -415,11 +466,12 @@ def get_regions_of_interest(coord, image_original, binary_mask):
     
     rough_segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
     refined_segmented = np.zeros_like(rough_segmented)
-
-    # Step 2: Process each region
+ 
     for region in ski.measure.regionprops(rough_segmented, intensity_image=image_original):
+        
         minr, minc, maxr, maxc = region.bbox  # Get bounding box of region
         mask = (rough_segmented[minr:maxr, minc:maxc] == region.label)  # Extract the region
+        
         
         # Step 3: Compute mean boundary intensity
         boundary = ski.morphology.dilation(mask, ski.morphology.disk(1)) ^ mask  # Find boundary pixels
@@ -428,7 +480,78 @@ def get_regions_of_interest(coord, image_original, binary_mask):
             #print(f"Mean boundary intensity for region {region.label}: {mean_boundary_intensity}")
         else:
             mean_boundary_intensity = 0
-            print(f"Warning: No boundary pixels found for region {region.label}")
+            #print(f"Warning: No boundary pixels found for region {region.label}")
+            continue
+
+        # Step 4: Construct new window
+        new_window = image_original[minr:maxr, minc:maxc].copy()
+        new_window[~mask] = mean_boundary_intensity  # Replace background with mean boundary intensity
+        
+        local_maxima = ski.feature.peak_local_max(new_window, min_distance=2, exclude_border=False)
+            
+        # Step 4: Filter maxima based on the mask and thresholding condition
+        synapse_centers = [(x, y) for x, y in local_maxima if new_window[x, y] > mean_boundary_intensity]
+        
+        # add synapse_center to coord
+        coord.extend(synapse_centers)
+        
+        
+        """print(f"Detected {len(synapse_centers)} synapse centers in region {region.label}")
+        print(synapse_centers)
+        
+        # plot the centers
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(new_window, cmap='gray')
+        ax.scatter([y for x, y in synapse_centers], [x for x, y in synapse_centers],
+                   color='red', s=20, label="Detected Centers")
+        ax.set_title("Synapse Centers Overlaid on Image")
+        ax.legend()
+        plt.show()"""
+        
+    # erase from coord duplicate
+    coord = list(set(coord)) 
+    
+    print(f"Detected {len(coord)} synapse centers after second pass")
+        
+    # Step 1: Initial rough segmentation
+    image_markers = np.zeros_like(image_original, dtype=np.int32)
+    for i, (x, y) in enumerate(coord, 1):  # Start at 1 (0 is background)
+        image_markers[int(x), int(y)] = i + 100  # Offset markers to avoid overlap
+    
+    rough_segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
+    refined_segmented = np.zeros_like(rough_segmented) 
+    
+    # plot the centers
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.imshow(image_original, cmap='gray')
+    ax.scatter([y for x, y in coord], [x for x, y in coord],
+               color='red', s=2, label="Detected Centers")
+    ax.set_title("Synapse Centers Overlaid on Image")
+    ax.legend()
+    plt.show()
+    
+    # plot rough_segmented
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.imshow(rough_segmented, cmap='gray')
+    ax.set_title("Rough Segmented")
+    plt.show()
+
+ 
+    # Step 2: Process each region
+    for region in ski.measure.regionprops(rough_segmented, intensity_image=image_original):
+        
+        minr, minc, maxr, maxc = region.bbox  # Get bounding box of region
+        mask = (rough_segmented[minr:maxr, minc:maxc] == region.label)  # Extract the region
+        
+        
+        # Step 3: Compute mean boundary intensity
+        boundary = ski.morphology.dilation(mask, ski.morphology.disk(1)) ^ mask  # Find boundary pixels
+        if image_original[minr:maxr, minc:maxc][boundary].size > 0:
+            mean_boundary_intensity = np.mean(image_original[minr:maxr, minc:maxc][boundary])
+            #print(f"Mean boundary intensity for region {region.label}: {mean_boundary_intensity}")
+        else:
+            mean_boundary_intensity = 0
+            #print(f"Warning: No boundary pixels found for region {region.label}")
             continue
 
         # Step 4: Construct new window
@@ -470,25 +593,27 @@ def get_regions_of_interest(coord, image_original, binary_mask):
         """# Create a figure with a specified size for the combined image
         fig, axes = plt.subplots(1, 3, figsize=(24, 8)) # 1 row, 3 columns
         # Visualize region (first subplot)
-        axes[0].imshow(mask)
+        axes[0].imshow(mask, cmap='gray')
         axes[0].set_title(f"Region {region.label}")
         axes[0].axis('off') # Turn off axis labels and ticks
         # Visualize new window (second subplot)
-        axes[1].imshow(new_window)
+        axes[1].imshow(new_window, cmap='gray')
         axes[1].set_title(f"New window for region {region.label} with mean boundary intensity for background")
         axes[1].axis('off')
         # Visualize refined region (third subplot)
-        axes[2].imshow(refined_mask)
+        axes[2].imshow(refined_mask, cmap='gray')
         axes[2].set_title(f"Refined region {region.label}")
         axes[2].axis('off')
         # Adjust layout to prevent overlapping titles
         plt.tight_layout()
         # Show the combined image
         plt.show()"""
-
+        
 
     # Step 7: Compute refined region properties
     region_props = ski.measure.regionprops(refined_segmented, intensity_image=image_original)
+    
+    print(f"Detected {len(region_props)} synapses")
 
     return region_props, refined_segmented
 

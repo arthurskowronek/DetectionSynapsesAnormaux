@@ -222,11 +222,11 @@ if __name__ == "__main__":
     # ---------- Test model accuracy ----------
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
     model_types = ['random_forest']
-    #test_model_accuracy(model_types)
+    test_model_accuracy(model_types)
     
     
     # ---------- Test pipeline ----------
-    test_pipeline()
+    #test_pipeline()
     
     
     # ---------- Test crible genetique ----------
