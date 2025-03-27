@@ -19,6 +19,8 @@ from skimage.color import label2rgb
 from sklearn.preprocessing import StandardScaler
 from feature_engine.selection import MRMR
 import pandas as pd
+from scipy import stats
+from skimage.feature import graycomatrix, graycoprops
 
 
 from constants import *
@@ -157,6 +159,61 @@ def rms_roughness(curve, window_length=11, polyorder=2):
     roughness = np.sqrt(np.mean(deviations**2))
     return roughness
 
+def calculate_glcm_features(image, distances=[1], angles=[0]):
+    """
+    Calculate multiple GLCM texture features for an image
+    
+    Parameters:
+    -----------
+    image : numpy.ndarray
+        Input image (grayscale)
+    distances : list, optional
+        List of pixel pair distances
+    angles : list, optional
+        List of angles to consider
+    
+    Returns:
+    --------
+    dict
+        Dictionary of GLCM texture features
+    """
+    # Ensure image is 2D and has appropriate data type
+    image = np.atleast_2d(image).astype(np.uint8)
+    
+    # Handle empty or zero-sized images
+    if image.size == 0:
+        return {
+            'contrast': 0,
+            'dissimilarity': 0,
+            'homogeneity': 0,
+            'energy': 0,
+            'correlation': 0
+        }
+    
+    # Normalize image to 8-bit range if needed
+    image = ((image - image.min()) / (image.max() - image.min()) * 255).astype(np.uint8)
+    
+    # Compute GLCM
+    glcm = graycomatrix(
+        image, 
+        distances=distances, 
+        angles=angles, 
+        levels=256,  # Full 8-bit range
+        symmetric=True,  # Symmetric to capture all directions
+        normed=True  # Normalize the matrix
+    )
+    
+    # Calculate features
+    features = {
+        'contrast': graycoprops(glcm, 'contrast')[0, 0],
+        'dissimilarity': graycoprops(glcm, 'dissimilarity')[0, 0],
+        'homogeneity': graycoprops(glcm, 'homogeneity')[0, 0],
+        'energy': graycoprops(glcm, 'energy')[0, 0],
+        'correlation': graycoprops(glcm, 'correlation')[0, 0]
+    }
+    
+    return features
+
 # ---------- Feature extraction ----------
 
 def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_FEAT, 
@@ -222,7 +279,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     all_basic_features = {
         "major_axis_length": {
             "values": [prop.axis_major_length for prop in component_props],
-            "range": (0, 20)
+            "range": (0, np.inf)
         },
         "axis_ratio": {
             "values": [prop.axis_minor_length / prop.axis_major_length if prop.axis_major_length != 0 else 0 for prop in component_props],
@@ -234,11 +291,11 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         },
         "area": {
             "values": [prop.area for prop in component_props],
-            "range": (0, 50)
+            "range": (0, np.inf)
         },
         "perimeter": {
             "values": [prop.perimeter for prop in component_props],
-            "range": (0, 50)
+            "range": (0, np.inf)
         },
         "convex_area": {
             "values": [prop.convex_area for prop in component_props],
@@ -254,15 +311,61 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         },
         "mean_intensity": {
             "values": [prop.mean_intensity for prop in component_props],
-            "range": (0, 3000)
+            "range": (0, np.inf)
         },
         "max_intensity": {
             "values": [prop.max_intensity for prop in component_props],
-            "range": (0, 3000)
+            "range": (0, np.inf)
         },
         "min_intensity": {
             "values": [prop.min_intensity for prop in component_props],
-            "range": (0, 3000)
+            "range": (0, np.inf)
+        },
+        "gvsd": {
+            "values": [prop.intensity_image.std() for prop in component_props],
+            "range": (0, np.inf) 
+        },
+        "skewness": {
+            "values": [stats.skew(prop.intensity_image.flatten()) if np.std(prop.intensity_image) > 1e-8 else 0 for prop in component_props],
+            "range": (-np.inf, np.inf)
+        },
+        "kurtosis": {
+            "values": [stats.kurtosis(prop.intensity_image.flatten(), fisher=True) if np.std(prop.intensity_image) > 1e-8 else 0 for prop in component_props],
+            "range": (-np.inf, np.inf)
+        },
+        "contrast_GLCM": {
+            "values": [calculate_glcm_features(prop.intensity_image)['contrast'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "dissimilarity_GLCM": {
+            "values": [calculate_glcm_features(prop.intensity_image)['dissimilarity'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "homogeneity_GLCM": {
+            "values": [calculate_glcm_features(prop.intensity_image)['homogeneity'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "energy_GLCM": {
+            "values": [calculate_glcm_features(prop.intensity_image)['energy'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "correlation_GLCM": {
+            "values": [calculate_glcm_features(prop.intensity_image)['correlation'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "ellipticity": {
+            "values": [
+                1 - (prop.minor_axis_length / prop.major_axis_length) if prop.major_axis_length > 0 else 0
+                for prop in component_props
+            ],
+            "range": (0, 1)
+        },
+        "circularity": {
+            "values": [
+                (4 * np.pi * prop.area / (prop.perimeter ** 2)) if prop.perimeter > 0 else 0
+                for prop in component_props
+            ],
+            "range": (0, 1)
         }
     }
     
@@ -270,6 +373,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     # If basic_features is None, include all basic features
     if basic_features is None:
         basic_features = list(all_basic_features.keys())
+        #print(f"Using all basic features: {basic_features}")
     
     # Only include the specified basic features
     for feature in basic_features:
@@ -278,18 +382,10 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
             values = all_basic_features[feature]["values"]
             bin_range = all_basic_features[feature]["range"]
             
-            # Compute histogram
+            # change bin range to the min and max of the values
+            bin_range = (min(values), max(values))    
+            
             hist, bins = np.histogram(values, bins=np.linspace(*bin_range, num=n_bins), density=True)
-        
-            """# use PCA to reduce the number of features
-            scaler = StandardScaler()
-            hist_PCA = scaler.fit_transform(hist.reshape(-1, 1))
-            
-            pca = PCA(n_components=1)
-            hist_PCA = pca.fit_transform(hist_PCA)
-            
-            print(hist_PCA.shape)
-            print(hist_PCA)"""
             
             # get mean of the histogram
             mean_hist = np.mean(hist)
@@ -752,6 +848,28 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
             BASIC_FEATURES.append('max_intensity')
         if INCLUDE_MIN_INTENSITY:
             BASIC_FEATURES.append('min_intensity')
+        if INCLUDE_GVSD:
+            BASIC_FEATURES.append('gvsd')
+        if INCLUDE_SKEWNESS:
+            BASIC_FEATURES.append('skewness')
+        if INCLUDE_KURTOSIS:
+            BASIC_FEATURES.append('kurtosis')
+        if INCLUDE_CIRCULARITY:
+            BASIC_FEATURES.append('circularity')
+        if INCLUDE_ELLIPTICITY:
+            BASIC_FEATURES.append('ellipticity')
+        if INCLUDE_CONTRAST_GLCM:
+            BASIC_FEATURES.append('contrast_GLCM')
+        if INCLUDE_DISSIMILARITY_GLCM:
+            BASIC_FEATURES.append('dissimilarity_GLCM')
+        if INCLUDE_HOMOGENEITY_GLCM:
+            BASIC_FEATURES.append('homogeneity_GLCM')
+        if INCLUDE_ENERGY_GLCM:
+            BASIC_FEATURES.append('energy_GLCM')
+        if INCLUDE_CORRELATION_GLCM:
+            BASIC_FEATURES.append('correlation_GLCM')
+
+
         
         for im_num, image in enumerate(X):
             print(f'Extracting features for image {im_num+1}/{len(X)}')
