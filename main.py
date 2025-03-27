@@ -29,6 +29,11 @@ def test_model_accuracy(model_types):
     
     # ---------- Feature Selection ----------
     number_features_before = X_features.shape[1]
+    
+    # scale features
+    scaler = StandardScaler()
+    X_features = scaler.fit_transform(X_features)
+    
     # Here we choose the top k features 
     X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
     
@@ -146,12 +151,17 @@ def crible_genetique():
     X_features, features = get_feature_vector(X_preprocessed, y, X_copy, maxima, mask, intensity, recompute=True)
     
     # ---------- Feature Selection ----------
+    scaler = StandardScaler()
+    X_features = scaler.fit_transform(X_features)
+    
+    # compute the features to keep
+    X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
+    
     # get indice of features to keep in 'models/selected_features.txt' file
-    with open('models/selected_features.txt', 'r') as f:
+    """with open('models/selected_features.txt', 'r') as f:
         selected_features = f.read().splitlines()
     selected_features = [int(i) for i in selected_features]
-    
-    X_features = X_features[:, selected_features]
+    X_features = X_features[:, selected_features]"""
     
     # ---------- Probabilities ----------
     # load model from disk

@@ -463,9 +463,6 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     
     # ---------- Feature reduction ----------
     """# Use PCA to reduce the number of features
-    scaler = StandardScaler()
-    feat_vector_scaled = scaler.fit_transform(np.array(feat_vector).reshape(1, -1))
-    
     pca = PCA(n_components=5)
     feat_vector_scaled = pca.fit_transform(feat_vector_scaled)
     
@@ -879,9 +876,16 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
             X_df = pd.DataFrame(X, columns=feature_names if feature_names else [f'feature_{i}' for i in range(X.shape[1])])
         else:
             X_df = X.copy()
+            
+        print(X_df)
         
         # Initialize MRMR selector
-        mrmr_selector = MRMR(method="FCQ", max_features= None, regression=False)
+        # method 1 : F-Statistic
+        #mrmr_selector = MRMR(method="FCQ", max_features=8, regression=False)
+        # method 2 : Random forest
+        mrmr_selector = MRMR(method="RFCQ",max_features=None, scoring="roc_auc",param_grid = {"n_estimators": [5, 30, 100], "max_depth":[1,2,3]},cv=3,regression=False, random_state=42)
+        # method 3 : Mutual information
+        #mrmr_selector = MRMR(method="MIQ", max_features=11, regression=False) 
         
         # Fit and transform the data
         mrmr_selector.fit(X_df, y)
@@ -893,20 +897,15 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
         plt.title("Relevance")
         plt.show()
         
-        X_df = mrmr_selector.transform(X_df)
+        # transform the data to keep only the selected features 
+        X_df = mrmr_selector.transform(X_df) 
         
-        
-        print(f"Selected {X_df.shape[1]} features out of {X.shape[1]}")
         print(f"Selected features (mRMR): {X_df.columns}")
-        print(X_df)
+   
       
-      
-        
         # Get indices of selected features
-        if feature_names:
-            selected_indices = [feature_names.index(name) for name in selected_feature_names]
-        else:
-            selected_indices = [X_df.columns.get_loc(name) for name in selected_feature_names]
+        selected_indices = mrmr_selector.get_support(indices=True)
+        selected_feature_names = [feature_names[i] for i in selected_indices]
         
         # Save selected feature indices
         with open('models/selected_features.txt', 'w') as f:
