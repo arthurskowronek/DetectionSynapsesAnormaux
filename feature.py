@@ -17,6 +17,8 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from skimage.color import label2rgb
 from sklearn.preprocessing import StandardScaler
+from feature_engine.selection import MRMR
+import pandas as pd
 
 
 from constants import *
@@ -458,6 +460,21 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         # Add to feature vector
         feat_vector.extend(mean_hog)
     
+    
+    # ---------- Feature reduction ----------
+    """# Use PCA to reduce the number of features
+    scaler = StandardScaler()
+    feat_vector_scaled = scaler.fit_transform(np.array(feat_vector).reshape(1, -1))
+    
+    pca = PCA(n_components=5)
+    feat_vector_scaled = pca.fit_transform(feat_vector_scaled)
+    
+    print(pca.explained_variance_ratio_)  # Shows how much each component explains
+    print(sum(pca.explained_variance_ratio_))  # Total variance retained
+    
+    feat_vector = feat_vector_scaled"""
+    
+    
     return np.array(feat_vector)
 
 def get_synapse_centers_using_hessian(region, image, sigma=2):
@@ -854,18 +871,44 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
         return X[:, mask], lasso
 
     elif method == 'mRMR':
+        
         # minimumRedundancyMaximumRelevance(mRMR) feature selection
         
-        # define the number of features to select
-        n_selected_features = k
-        # define the feature selection method
-        fs = pyfeats.mRMR()
-        # apply the feature selection method
-        fs.fit(X, y)
-        # get the selected feature indices
-        selected_indices = fs.transform(n_selected_features)
-        selected_feature_names = [feature_names[i] for i in selected_indices]
-        # save indices of selected features in a file "selected_features.txt" in 'models' folder
+        # Convert numpy array to pandas DataFrame if needed
+        if not isinstance(X, pd.DataFrame):
+            X_df = pd.DataFrame(X, columns=feature_names if feature_names else [f'feature_{i}' for i in range(X.shape[1])])
+        else:
+            X_df = X.copy()
+        
+        # Initialize MRMR selector
+        mrmr_selector = MRMR(method="FCQ", max_features= None, regression=False)
+        
+        # Fit and transform the data
+        mrmr_selector.fit(X_df, y)
+
+        
+        # plot the relevance
+        pd.Series(mrmr_selector.relevance_, index=mrmr_selector.variables_).sort_values(
+            ascending=False).plot.bar(figsize=(15, 6))
+        plt.title("Relevance")
+        plt.show()
+        
+        X_df = mrmr_selector.transform(X_df)
+        
+        
+        print(f"Selected {X_df.shape[1]} features out of {X.shape[1]}")
+        print(f"Selected features (mRMR): {X_df.columns}")
+        print(X_df)
+      
+      
+        
+        # Get indices of selected features
+        if feature_names:
+            selected_indices = [feature_names.index(name) for name in selected_feature_names]
+        else:
+            selected_indices = [X_df.columns.get_loc(name) for name in selected_feature_names]
+        
+        # Save selected feature indices
         with open('models/selected_features.txt', 'w') as f:
             counter = 0
             for item in selected_indices:
@@ -873,9 +916,14 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
                     # write the indices of the selected features
                     f.write("%s\n" % counter)
                 counter += 1
-        if verbose_features_selected :
+        
+        # Print selected features if verbose mode is on
+        if verbose_features_selected:
             print(f"Selected features (mRMR): {selected_feature_names}")
-        return X[:, selected_indices], fs
+        
+        # Return selected features and their indices
+        return X[:, selected_indices], selected_indices
+           
     else:
         print("Method must be 'kbest', 'boruta', or 'lasso'.")
         return X, None
