@@ -27,8 +27,21 @@ def test_model_accuracy(model_types):
     # ---------- Compute features ----------
     X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
     
+    # ---------- Feature Reduction ----------
+    """# Scale features
+    scaler = StandardScaler()
+    X_features = scaler.fit_transform(X_features)
+    
+    pca = PCA(n_components=4)
+    X_features = pca.fit_transform(X_features)
+    
+    print(f"Explained variance ratio: {pca.explained_variance_ratio_}")
+    print(f"Explained variance: {pca.explained_variance_}")"""
+    
+    
+    
     # ---------- Feature Selection ----------
-    number_features_before = X_features.shape[1]
+    """number_features_before = X_features.shape[1]
     
     # scale features
     scaler = StandardScaler()
@@ -37,7 +50,7 @@ def test_model_accuracy(model_types):
     # Here we choose the top k features 
     X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
     
-    number_features_after = X_features.shape[1]
+    number_features_after = X_features.shape[1]"""
     
 
     # ---------- Test all models and generate a comprehensive report ----------
@@ -76,8 +89,8 @@ def test_model_accuracy(model_types):
     print("="*70)
     
     
-    print(f"Number of features before: {number_features_before}")
-    print(f"Number of features after: {number_features_after}")
+    #print(f"Number of features before: {number_features_before}")
+    #print(f"Number of features after: {number_features_after}")
     
        
 def test_pipeline():

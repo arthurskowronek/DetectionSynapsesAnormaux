@@ -461,17 +461,6 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
         feat_vector.extend(mean_hog)
     
     
-    # ---------- Feature reduction ----------
-    """# Use PCA to reduce the number of features
-    pca = PCA(n_components=5)
-    feat_vector_scaled = pca.fit_transform(feat_vector_scaled)
-    
-    print(pca.explained_variance_ratio_)  # Shows how much each component explains
-    print(sum(pca.explained_variance_ratio_))  # Total variance retained
-    
-    feat_vector = feat_vector_scaled"""
-    
-    
     return np.array(feat_vector)
 
 def get_synapse_centers_using_hessian(region, image, sigma=2):
@@ -796,7 +785,7 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
 
 # ---------- Feature selection ----------
 
-def select_features(X, y, k=10, method='kbest', verbose_features_selected=False, feature_names=None):
+def select_features(X, y, k=10, method='mRMR', verbose_features_selected=False, feature_names=None):
     """
     Select the top k features using specified method and show selected features.
 
@@ -924,6 +913,6 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
         return X[:, selected_indices], selected_indices
            
     else:
-        print("Method must be 'kbest', 'boruta', or 'lasso'.")
+        print("Method must be 'kbest', 'boruta', 'mRMR' or 'lasso'.")
         return X, None
 
