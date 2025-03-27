@@ -399,12 +399,6 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         Preprocessed images
     """
     preprocess_file = f'{Path(pkl_name).stem}_preprocessing.pkl'
-    
-    # if name already exists, add a number to the name
-    i = 1
-    while (DATASET_PKL_DIR / preprocess_file).exists():
-        preprocess_file = f'{Path(pkl_name).stem}_preprocessing_{i}.pkl'
-        i += 1
         
     
     # Try to load existing preprocessing
@@ -421,6 +415,12 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
         except FileNotFoundError:
             print('Preprocessing file not found. Recomputing...')
             recompute = True
+    
+    # if name already exists, add a number to the name
+    i = 1
+    while (DATASET_PKL_DIR / preprocess_file).exists():
+        preprocess_file = f'{Path(pkl_name).stem}_preprocessing_{i}.pkl'
+        i += 1
     
     # Validate input
     if recompute and X is None:

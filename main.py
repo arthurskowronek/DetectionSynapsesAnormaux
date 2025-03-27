@@ -7,8 +7,8 @@ from crible_functions import *
 
 def test_model_accuracy(model_types):
     # ---------- Load dataset ----------
-    filename_pkl_dataset = 'dataset_2025-03-21_13-32-05'
-    data = create_dataset(reimport_images=True, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
+    filename_pkl_dataset = 'dataset_118'
+    data = create_dataset(reimport_images=False, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Convert to numpy arrays
     X = np.array(data['data'])
@@ -22,7 +22,7 @@ def test_model_accuracy(model_types):
     X_copy = X.copy()
     
     # ---------- Preprocessing ----------
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
     X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
@@ -30,7 +30,7 @@ def test_model_accuracy(model_types):
     # ---------- Feature Selection ----------
     number_features_before = X_features.shape[1]
     # Here we choose the top k features 
-    #X_features, selector = select_features(X_features, y, k=k_features, method='boruta', verbose_features_selected=False) 
+    X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
     
     number_features_after = X_features.shape[1]
     
@@ -43,7 +43,7 @@ def test_model_accuracy(model_types):
     for model_type in model_types:
         print(f"\n{'-'*50}")
         print(f"Evaluating {model_type}...")
-        mean_corr_estim = train_model(X_features, y, model_type=model_type, n_runs=100)
+        mean_corr_estim = train_model(X_features, y, verbose_plot = True, model_type=model_type, n_runs=100)
         results[model_type] = mean_corr_estim
         print(f"{'-'*50}\n")
 

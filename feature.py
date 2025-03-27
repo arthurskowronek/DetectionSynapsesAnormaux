@@ -13,8 +13,10 @@ from sklearn.linear_model import LassoCV
 from scipy.signal import savgol_filter
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from skimage.color import label2rgb
+from sklearn.preprocessing import StandardScaler
 
 
 from constants import *
@@ -210,6 +212,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     
     # Always include number of detected components
     num_synapses = len(component_props)
+    #print(f"Number of detected components: {num_synapses}")
     feat_vector = [num_synapses]
     
     
@@ -269,30 +272,51 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     # Only include the specified basic features
     for feature in basic_features:
         if feature in all_basic_features:
+            #print(f"----- Computing feature: {feature} -----")
             values = all_basic_features[feature]["values"]
             bin_range = all_basic_features[feature]["range"]
             
             # Compute histogram
             hist, bins = np.histogram(values, bins=np.linspace(*bin_range, num=n_bins), density=True)
+        
+            """# use PCA to reduce the number of features
+            scaler = StandardScaler()
+            hist_PCA = scaler.fit_transform(hist.reshape(-1, 1))
+            
+            pca = PCA(n_components=1)
+            hist_PCA = pca.fit_transform(hist_PCA)
+            
+            print(hist_PCA.shape)
+            print(hist_PCA)"""
+            
+            # get mean of the histogram
+            mean_hist = np.mean(hist)
+            
             # Multiply by bin width to get an approximation of the density integrated over each bin
             hist_norm = hist * (bins[1] - bins[0])
             
             # Add to feature vector
-            feat_vector.extend(hist_norm)
+            feat_vector.append(mean_hist)
+            #feat_vector.extend(hist_norm)
         else:
             print(f"Warning: Unknown basic feature '{feature}'. Skipping.")
-          
+        
     # ---------- Neighborhood features ----------
     if include_neighborhood:
         # Compute nearest neighbor histogram (spatial proximity of centroids)
-        bins_nn = np.linspace(3, 30, num=n_bins)
+        bins_nn = np.linspace(0, 30, num=n_bins)
         centroid_positions = np.array([prop.centroid for prop in component_props])
         
         try:
             hist_nn = first_neighbor_distance_histogram(centroid_positions, bins_nn)
+    
+            # get the mean of the histogram
+            mean_hist_nn = np.mean(hist_nn)
+            
             
             # Add to feature vector
-            feat_vector.extend(hist_nn * (bins_nn[1] - bins_nn[0]))
+            feat_vector.append(mean_hist_nn)
+            #feat_vector.extend(hist_nn * (bins_nn[1] - bins_nn[0]))
         except Exception as e:
             print(f"Warning: Could not compute nearest neighbor features: {e}")
     
@@ -301,9 +325,6 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     for prop in component_props:
         # Extract ROI using bounding box from regionprops
         minr, minc, maxr, maxc = prop.bbox
-        # Make sure we have a non-zero region
-        if maxr - minr < 5 or maxc - minc < 5:
-            continue
         
         roi_mask = prop.image  # binary mask of the region
         intensity_roi = image[minr:maxr, minc:maxc]  # intensity values
@@ -326,7 +347,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
     
     # ---------- Zernike moments ----------
     if include_zernike and roi_data:
-        zernike_radius = 10  # Adjust as needed
+        zernike_radius = 10  
         zernike_list = []
         
         for roi in roi_data:
@@ -336,20 +357,39 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
             except Exception as e:
                 print(f"Warning: Could not compute Zernike moments: {e}")
                 # Append zeros for this ROI
-                zernike_list.append(np.zeros(3))  # Assuming 6 Zernike features
+                zernike_list.append(np.zeros(len(roi_data)))  
         
-        if zernike_list:
-            mean_zernike = np.mean(np.vstack(zernike_list), axis=0)
-            std_zernike = np.std(np.vstack(zernike_list), axis=0)
-            median_zernike = np.median(np.vstack(zernike_list), axis=0)
+        #print(f"Length of zernike_list: {len(zernike_list)}")
+        
+        
+        # Standardize the data 
+        scaler = StandardScaler()
+        zernike_list_scaled = scaler.fit_transform(zernike_list)
+        
+        # use PCA to reduce the number of features of zernike moments
+        pca = PCA(n_components=1)
+        zernike_list_scaled = pca.fit_transform(zernike_list_scaled)
+        
+        #print(pca.explained_variance_ratio_)  # Shows how much each component explains
+        #print(sum(pca.explained_variance_ratio_))  # Total variance retained
+        
+        #print(f"Shape of zernike_list after PCA: {zernike_list_scaled.shape}")
+
+        
+        if zernike_list_scaled is not None:
+            mean_zernike = np.mean(np.vstack(zernike_list_scaled), axis=0)
+            std_zernike = np.std(np.vstack(zernike_list_scaled), axis=0)
+            median_zernike = np.median(np.vstack(zernike_list_scaled), axis=0)
         else:
-            mean_zernike = np.zeros(3)  # Assuming 6 Zernike features
+            mean_zernike = np.zeros(3)  
+            
+        
         
         # Add to feature vector
         feat_vector.extend(mean_zernike)
         feat_vector.extend(std_zernike)
-        feat_vector.extend(median_zernike)
-    
+        #feat_vector.extend(median_zernike)
+       
     # ---------- Hu moments ----------
     if include_hu and roi_data:
         hu_list = []
@@ -363,17 +403,30 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
                 # Append zeros for this ROI
                 hu_list.append(0)  
         
+        # Standardize the data 
+        scaler = StandardScaler()
+        hu_list_scaled = scaler.fit_transform(hu_list)
+        
+        # use PCA to reduce the number of features of zernike moments
+        pca = PCA(n_components=1)
+        hu_list_scaled = pca.fit_transform(hu_list_scaled)
+        
+        #print(pca.explained_variance_ratio_)  # Shows how much each component explains
+        #print(sum(pca.explained_variance_ratio_))  # Total variance retained
+        
+        
         if hu_list:
-            mean_hu = np.mean(np.vstack(hu_list), axis=0)
-            std_hu = np.std(np.vstack(hu_list), axis=0)
-            median_hu = np.median(np.vstack(hu_list), axis=0)
+            mean_hu = np.mean(np.vstack(hu_list_scaled), axis=0)
+            std_hu = np.std(np.vstack(hu_list_scaled), axis=0)
+            median_hu = np.median(np.vstack(hu_list_scaled), axis=0)
         else:
             mean_hu = np.zeros(3)
+            
         
         # Add to feature vector
         feat_vector.extend(mean_hu)
         feat_vector.extend(std_hu)
-        feat_vector.extend(median_hu)
+        #feat_vector.extend(median_hu)
     
     # ---------- HOG features ----------
     if include_hog and roi_data:
@@ -511,7 +564,7 @@ def get_regions_of_interest(coord, image_original, binary_mask):
     # erase from coord duplicate
     coord = list(set(coord)) 
     
-    print(f"Detected {len(coord)} synapse centers after second pass")
+    #print(f"Detected {len(coord)} synapse centers after second pass")
         
     # Step 1: Initial rough segmentation
     image_markers = np.zeros_like(image_original, dtype=np.int32)
@@ -521,7 +574,7 @@ def get_regions_of_interest(coord, image_original, binary_mask):
     rough_segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
     refined_segmented = np.zeros_like(rough_segmented) 
     
-    # plot the centers
+    """# plot the centers
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.imshow(image_original, cmap='gray')
     ax.scatter([y for x, y in coord], [x for x, y in coord],
@@ -534,7 +587,7 @@ def get_regions_of_interest(coord, image_original, binary_mask):
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.imshow(rough_segmented, cmap='gray')
     ax.set_title("Rough Segmented")
-    plt.show()
+    plt.show()"""
 
  
     # Step 2: Process each region
@@ -613,50 +666,9 @@ def get_regions_of_interest(coord, image_original, binary_mask):
     # Step 7: Compute refined region properties
     region_props = ski.measure.regionprops(refined_segmented, intensity_image=image_original)
     
-    print(f"Detected {len(region_props)} synapses")
+    #print(f"Detected {len(region_props)} synapses")
 
     return region_props, refined_segmented
-
-def get_regions_of_interestV0(coord, image_original, binary_mask):
-    """
-    Segment the image via watershed given initial coordinates.
-    
-    Parameters
-    ----------
-    coord : list or array
-        List of (x, y) coordinates for markers.
-    image_original : ndarray
-        Original intensity image.
-    binary_mask : ndarray
-        Binary mask of the foreground.
-        
-    Returns
-    -------
-    list
-        Region properties of segmented regions.
-    ndarray
-        Labeled segmentation mask.
-    """
-    image_markers = np.zeros_like(image_original, dtype=np.int32)
-    for i, (x, y) in enumerate(coord, 1):  # Start at 1 (0 is background)
-        image_markers[int(x), int(y)] = i + 100  # offset markers to avoid overlap
-    
-    # image_markers = morphology.dilation(image_markers, morphology.disk(2))
-    
-    segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
-    region_props = ski.measure.regionprops(segmented, intensity_image=image_original)
-    
-
-    
-    
-    # Visualize segmentation
-    """colored_labels = label2rgb(segmented, image=image_original, bg_label=0)
-    plt.figure(figsize=(8, 6))
-    plt.imshow(colored_labels)
-    plt.title("Refined Watershed Segmentation")
-    plt.show()"""
-    
-    return region_props, segmented
 
 def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
@@ -841,6 +853,29 @@ def select_features(X, y, k=10, method='kbest', verbose_features_selected=False,
             print(f"Selected features (lasso): {selected_feature_names}")
         return X[:, mask], lasso
 
+    elif method == 'mRMR':
+        # minimumRedundancyMaximumRelevance(mRMR) feature selection
+        
+        # define the number of features to select
+        n_selected_features = k
+        # define the feature selection method
+        fs = pyfeats.mRMR()
+        # apply the feature selection method
+        fs.fit(X, y)
+        # get the selected feature indices
+        selected_indices = fs.transform(n_selected_features)
+        selected_feature_names = [feature_names[i] for i in selected_indices]
+        # save indices of selected features in a file "selected_features.txt" in 'models' folder
+        with open('models/selected_features.txt', 'w') as f:
+            counter = 0
+            for item in selected_indices:
+                if item == True:
+                    # write the indices of the selected features
+                    f.write("%s\n" % counter)
+                counter += 1
+        if verbose_features_selected :
+            print(f"Selected features (mRMR): {selected_feature_names}")
+        return X[:, selected_indices], fs
     else:
         print("Method must be 'kbest', 'boruta', or 'lasso'.")
         return X, None

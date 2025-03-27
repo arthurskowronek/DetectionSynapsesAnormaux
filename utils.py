@@ -92,11 +92,6 @@ def create_dataset(reimport_images=False, test_random_mutant = False, test_rando
     # Ensure the pkl directory exists
     DATASET_PKL_DIR.mkdir(exist_ok=True)
     
-    i=1
-    while (DATASET_PKL_DIR / pkl_name).exists():
-        pkl_name = f'dataset_{DATE}_{i}.pkl'
-        i += 1
-    
     # Load existing dataset if not reimporting
     if not reimport_images:
         try:
@@ -107,6 +102,12 @@ def create_dataset(reimport_images=False, test_random_mutant = False, test_rando
             print(f"Dataset file {pkl_name} not found. Reimporting images...")
             reimport_images = True
     
+    
+    i=1
+    while (DATASET_PKL_DIR / pkl_name).exists():
+        pkl_name = f'dataset_{DATE}_{i}.pkl'
+        i += 1
+        
     if reimport_images:
         print("Importing images...")
         
