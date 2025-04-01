@@ -3,24 +3,27 @@ import skimage as ski
 import datetime
 import joblib
 import shutil
-from pathlib import Path
-from skimage.feature import hog
+import pandas as pd
 import pyfeats
 import pointpats
+from pathlib import Path
 from boruta import BorutaPy  
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LassoCV
-from scipy.signal import savgol_filter
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
-from skimage.color import label2rgb
 from sklearn.preprocessing import StandardScaler
 from feature_engine.selection import MRMR
-import pandas as pd
+
+import matplotlib.pyplot as plt
+
 from scipy import stats
-from skimage.feature import graycomatrix, graycoprops
+from scipy.signal import savgol_filter
+
+from skimage.feature import graycomatrix, graycoprops, hog
+from skimage.color import label2rgb
+
 
 
 from constants import *
@@ -214,6 +217,89 @@ def calculate_glcm_features(image, distances=[1], angles=[0]):
     
     return features
 
+def calculate_glds_features(image):
+    """
+    Calculate Gray Level Difference Statistics (GLDS) features for an image.
+    
+    Parameters:
+    -----------
+    image : numpy.ndarray
+        Input image (grayscale)
+    
+    Returns:
+    --------
+    dict
+        Dictionary of GLDS features
+    """
+    # Ensure image is 2D and has appropriate data type
+    #image = np.atleast_2d(image).astype(np.uint8)
+    
+    # Handle empty or zero-sized images
+    if image.size == 0:
+        return {
+            'contrast': 0,
+            'entropy': 0,
+            'homogeneity': 0,
+            'energy': 0,
+            'mean': 0
+        }
+    
+    # Normalize image to 8-bit range if needed
+    #image = ((image - image.min()) / (image.max() - image.min()) * 255).astype(np.uint8)
+    
+    # Compute GLDS features
+    glds = pyfeats.glds_features(image, mask=None)
+    
+    features = {
+        'contrast': glds[0],
+        'entropy': glds[1],
+        'homogeneity': glds[2],
+        'energy': glds[3],
+        'mean': glds[4]
+    }
+    
+    return features
+
+def calculate_ngtdm_features(image):
+    """
+    Calculate Neighborhood Gray Tone Difference Matrix (NGTDM) features for an image.
+    
+    Parameters:
+    -----------
+    image : numpy.ndarray
+        Input image (grayscale)
+    
+    Returns:
+    --------
+    dict
+        Dictionary of NGTDM features
+    """
+    # Ensure image is 2D and has appropriate data type
+    #image = np.atleast_2d(image).astype(np.uint8)
+    
+    # Handle empty or zero-sized images
+    if image.size == 0:
+        return {
+            'coarseness': 0,
+            'contrast': 0,
+            'busyness': 0,
+            'complexity': 0,
+            'strength': 0
+        }
+    
+    # Compute NGTDM features
+    ngtdm = pyfeats.ngtdm_features(image)
+    
+    features = {
+        'coarseness': ngtdm[0],
+        'contrast': ngtdm[1],
+        'busyness': ngtdm[2],
+        'complexity': ngtdm[3],
+        'strength': ngtdm[4]
+    }
+    
+    return features
+
 # ---------- Feature extraction ----------
 
 def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_FEAT, 
@@ -353,6 +439,46 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
             "values": [calculate_glcm_features(prop.intensity_image)['correlation'] for prop in component_props],
             "range": (0, np.inf)
         },
+        "Gray_Level_Difference_Statistics_contrast": {
+            "values": [calculate_glds_features(prop.intensity_image)['contrast'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "Gray_Level_Difference_Statistics_entropy": {
+            "values": [calculate_glds_features(prop.intensity_image)['entropy'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "Gray_Level_Difference_Statistics_homogeneity": {
+            "values": [calculate_glds_features(prop.intensity_image)['homogeneity'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "Gray_Level_Difference_Statistics_energy": {
+            "values": [calculate_glds_features(prop.intensity_image)['energy'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "Gray_Level_Difference_Statistics_mean": {
+            "values": [calculate_glds_features(prop.intensity_image)['mean'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "ngtdm_features_coarseness": {
+            "values": [calculate_ngtdm_features(prop.intensity_image)['coarseness'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "ngtdm_features_contrast": {
+            "values": [calculate_ngtdm_features(prop.intensity_image)['contrast'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "ngtdm_features_busyness": {
+            "values": [calculate_ngtdm_features(prop.intensity_image)['busyness'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "ngtdm_features_complexity": {
+            "values": [calculate_ngtdm_features(prop.intensity_image)['complexity'] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "ngtdm_features_strength": {
+            "values": [calculate_ngtdm_features(prop.intensity_image)['strength'] for prop in component_props],
+            "range": (0, np.inf)
+        },
         "ellipticity": {
             "values": [
                 1 - (prop.minor_axis_length / prop.major_axis_length) if prop.major_axis_length > 0 else 0
@@ -366,6 +492,30 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=N_BINS_
                 for prop in component_props
             ],
             "range": (0, 1)
+        },
+        "first_order_statistics_std": {
+            "values": [np.std(prop.intensity_image.flatten()) for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "first_order_statistics_median": {
+            "values": [np.median(prop.intensity_image.flatten()) for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "first_order_statistics_mode": {
+            "values": [stats.mode(prop.intensity_image.flatten())[0][0] for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "first_order_statistics_energy": {
+            "values": [np.sum(np.square(prop.intensity_image.flatten())) for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "first_order_statistics_entropy": {
+            "values": [stats.entropy(prop.intensity_image.flatten()) for prop in component_props],
+            "range": (0, np.inf)
+        },
+        "first_order_statistics_histogram_width": {
+            "values": [np.max(prop.intensity_image.flatten()) - np.min(prop.intensity_image.flatten()) for prop in component_props],
+            "range": (0, np.inf)
         }
     }
     

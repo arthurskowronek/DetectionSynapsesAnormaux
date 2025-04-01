@@ -41,7 +41,7 @@ def test_model_accuracy(model_types):
     
     
     # ---------- Feature Selection ----------
-    """number_features_before = X_features.shape[1]
+    number_features_before = X_features.shape[1]
     
     # scale features
     scaler = StandardScaler()
@@ -50,7 +50,7 @@ def test_model_accuracy(model_types):
     # Here we choose the top k features 
     X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
     
-    number_features_after = X_features.shape[1]"""
+    number_features_after = X_features.shape[1]
     
 
     # ---------- Test all models and generate a comprehensive report ----------
@@ -244,7 +244,7 @@ if __name__ == "__main__":
         
     # ---------- Test model accuracy ----------
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
-    model_types = ['random_forest']
+    model_types = ['hist_gradient_boosting']
     test_model_accuracy(model_types)
     
     

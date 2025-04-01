@@ -223,7 +223,8 @@ def process_data_augmentation(source_dir, target_dir, prefix, counter):
             # Generate random parameters for augmentation
             angle = random.uniform(0, 360)  # Random rotation angle
             do_flip = True  # Random flip decision
-            scale = random.uniform(0.8, 1.2)  # Random scale factor
+            #scale = random.uniform(0.8, 1.2)  # Random scale factor
+            scale = 1 
             
             # Start with the original image
             augmented_im = im.copy()
