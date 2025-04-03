@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.model_selection import train_test_split, learning_curve
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
@@ -11,7 +11,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from numpy.random import RandomState
-
+import matplotlib.pyplot as plt
+import seaborn as sns
+import joblib
 
 from utils import *
 
@@ -173,195 +175,93 @@ class SiameseClassifier:
         
         return np.array(predictions)
 
-def train_model(X_features, y, verbose_plot = False, model_type='random_forest', n_runs=10, test_size=0.3, random_state=26):
+def train_model(X_features, y, verbose_plot=False, model_type='random_forest', n_runs=10, test_size=0.3, random_state=26):
     """
     Train a model on the feature vectors with support for multiple classifier types.
-    
-    Parameters:
-    -----------
-    X_features : array-like
-        Feature vectors for training
-    y : array-like
-        Target labels
-    model_type : str, default='random_forest'
-        Type of model to train. Options are:
-        - 'hist_gradient_boosting'
-        - 'svm_rbf'
-        - 'light_gbm'
-        - 'knn'
-        - 'decision_tree'
-        - 'mlp'
-        - 'random_forest'
-        - 'siamese_network'
-    n_runs : int, default=10
-        Number of training runs to perform
-    test_size : float, default=0.3
-        Proportion of data to use for testing
-    random_state : int or RandomState, default=42
-        Random seed for reproducibility
-    
-    Returns:
-    --------
-    float
-        Mean accuracy across all runs
+    Now includes the confusion matrix and properly plotted learning curves.
     """
     print(f"Training {model_type} model...")
-    
-    # Convert to numpy arrays if they're not already
+
+    # Convert to numpy arrays if necessary
     X_features = np.array(X_features)
     y = np.array(y)
-    
-    # Convert labels to numeric
+
+    # Encode labels numerically
     unique_labels = np.unique(y)
     label_map = {label: i for i, label in enumerate(unique_labels)}
     y_numeric = np.array([label_map[label] for label in y])
-    
-    # Initialize results and seed
+
     correct_estimations = []
-    learning_curves = {
-        'train_sizes': [],
-        'train_scores': [],
-        'test_scores': []
-    }
     seed = RandomState(random_state) if isinstance(random_state, int) else random_state
-    
-    # Define model configurations
+
     model_configs = {
-        'hist_gradient_boosting': {
-            'cls': HistGradientBoostingClassifier,
-            'params': {'max_iter': 100, 'random_state': seed}
-        },
-        'svm_rbf': {
-            'cls': SVC,
-            'params': {'kernel': 'rbf', 'probability': True, 'random_state': seed}
-        },
-        'knn': {
-            'cls': KNeighborsClassifier,
-            'params': {'n_neighbors': 5}
-        },
-        'decision_tree': {
-            'cls': DecisionTreeClassifier,
-            'params': {'random_state': seed}
-        },
-        'mlp': {
-            'cls': MLPClassifier,
-            'params': {'hidden_layer_sizes': (100, 50), 'max_iter': 300, 'random_state': seed}
-        },
-        'random_forest': {
-            'cls': RandomForestClassifier,
-            'params': {'n_estimators': 10, 'random_state': seed}
-        },
-        'siamese_network': {
-            'cls': SiameseClassifier,
-            'params': {'input_dim': X_features.shape[1], 'n_epochs': 10}
-        }
+        'hist_gradient_boosting': (HistGradientBoostingClassifier, {'max_iter': 100, 'random_state': seed}),
+        'svm_rbf': (SVC, {'kernel': 'rbf', 'probability': True, 'random_state': seed}),
+        'knn': (KNeighborsClassifier, {'n_neighbors': 5}),
+        'decision_tree': (DecisionTreeClassifier, {'random_state': seed}),
+        'mlp': (MLPClassifier, {'hidden_layer_sizes': (100, 50), 'max_iter': 300, 'random_state': seed}),
+        'random_forest': (RandomForestClassifier, {'n_estimators': 10, 'random_state': seed}),
     }
-    
-    # Validate model_type
+
     if model_type not in model_configs:
         raise ValueError(f"Invalid model_type: {model_type}. Options are: {', '.join(model_configs.keys())}")
-    
-    # Run multiple training iterations
+
     for run in range(n_runs):
-        # Split data
         X_train, X_test, y_train, y_test = train_test_split(
             X_features, y_numeric, test_size=test_size, random_state=seed
         )
-        
-        # Initialize model
-        model_config = model_configs[model_type]
-        clf = model_config['cls'](**model_config['params'])
-        
-        # Compute learning curve
+
+        clf_class, clf_params = model_configs[model_type]
+        clf = clf_class(**clf_params)
+
+        # Compute Learning Curve
         train_sizes, train_scores, test_scores = learning_curve(
-            clf, X_train, y_train, 
-            train_sizes=np.linspace(0.1, 1.0, 5),  # 5 different training set sizes
-            cv=5,  # 5-fold cross-validation
-            scoring='accuracy'
+            clf, X_train, y_train, train_sizes=np.linspace(0.1, 1.0, 5), cv=5, scoring='accuracy'
         )
-        
-        # Store learning curve data
-        learning_curves['train_sizes'].append(train_sizes)
-        learning_curves['train_scores'].append(train_scores)
-        learning_curves['test_scores'].append(test_scores)
-        
-        # Train model
-        clf.fit(X_train, y_train)    
-        
-        # Evaluate
+
+        # Train Model
+        clf.fit(X_train, y_train)
+
+        # Evaluate Model
         y_pred = clf.predict(X_test)
         accuracy = accuracy_score(y_test, y_pred)
         correct_estimations.append(accuracy)
-        
-        # Show distribution of confidence in predictions
-        y_pred_proba = clf.predict_proba(X_test) if model_type != 'siamese_network' else None        
-        
-        
+
         # Update seed for next iteration
-        seed = RandomState(seed.randint(0, 2**32 - 1))
-        
+        seed = RandomState(43)
+
         # Print progress
         if (run + 1) % 5 == 0 or run == 0:
             print(f"Completed {run + 1}/{n_runs} runs. Current mean accuracy: {np.mean(correct_estimations):.4f}")
-            
-        if verbose_plot :
-            # if this is the last run, print the confidence histograms
-            if run == n_runs - 1:
-                plot_probability_histograms(y_pred_proba, class_names=['Mutant', 'Wildtype'])
-                plot_probability_boxplots(y_pred_proba, class_names=['Mutant', 'Wildtype'])
-                plot_probability_scatter(y_pred_proba, y_test, y_pred)
-                
-                # Learning Curve Visualization
-                plt.figure(figsize=(10, 6))
-                
-                # Average train and test scores across runs
-                avg_train_scores = np.mean(learning_curves['train_scores'], axis=0)
-                avg_test_scores = np.mean(learning_curves['test_scores'], axis=0)
-                
-                # Standard deviation of train and test scores
-                std_train_scores = np.std(learning_curves['train_scores'], axis=0)
-                std_test_scores = np.std(learning_curves['test_scores'], axis=0)
-                
-                avg_train_sizes = np.mean(learning_curves['train_sizes'], axis=0)
-                
-                # Plot learning curves with error bands
-                plt.plot(avg_train_sizes, avg_train_scores.mean(axis=1), 
-                         label='Training Score', color='blue', marker='o')
-                plt.fill_between(avg_train_sizes, 
-                                 avg_train_scores.mean(axis=1) - std_train_scores.mean(axis=1),
-                                 avg_train_scores.mean(axis=1) + std_train_scores.mean(axis=1), 
-                                 alpha=0.15, color='blue')
-                
-                plt.plot(avg_train_sizes, avg_test_scores.mean(axis=1), 
-                         label='Validation Score', color='red', marker='s')
-                plt.fill_between(avg_train_sizes, 
-                                 avg_test_scores.mean(axis=1) - std_test_scores.mean(axis=1),
-                                 avg_test_scores.mean(axis=1) + std_test_scores.mean(axis=1), 
-                                 alpha=0.15, color='red')
-                
-                plt.title(f'Learning Curves - {model_type.replace("_", " ").title()}')
-                plt.xlabel('Training Set Size')
-                plt.ylabel('Accuracy')
-                plt.legend(loc='lower right')
-                plt.grid(True)
-                plt.tight_layout()
-                plt.show()
-            
-    # save model
-    if model_type == 'siamese_network':
-        torch.save(clf.model.state_dict(), 'models/model.pth')
-    else:
-        joblib.dump(clf, 'models/model.pkl')
-        
-    """import shap 
-    model = clf
-    explainer = shap.TreeExplainer(model) 
-    shap_values = explainer.shap_values(X_features) 
-    shap.summary_plot(shap_values, X_features)"""
-            
-    # Calculate and return mean accuracy
+
+        if verbose_plot and run == n_runs - 1:
+            # **Plot Confusion Matrix**
+            cm = confusion_matrix(y_test, y_pred)
+            disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=unique_labels)
+            disp.plot(cmap='Blues')
+            plt.title("Confusion Matrix")
+            plt.show()
+
+            # **Plot Learning Curve**
+            plt.figure(figsize=(10, 6))
+            plt.plot(train_sizes, np.mean(train_scores, axis=1), 'o-', color='blue', label="Training score")
+            plt.plot(train_sizes, np.mean(test_scores, axis=1), 'o-', color='red', label="Validation score")
+            plt.fill_between(train_sizes, np.mean(train_scores, axis=1) - np.std(train_scores, axis=1),
+                             np.mean(train_scores, axis=1) + np.std(train_scores, axis=1), alpha=0.15, color='blue')
+            plt.fill_between(train_sizes, np.mean(test_scores, axis=1) - np.std(test_scores, axis=1),
+                             np.mean(test_scores, axis=1) + np.std(test_scores, axis=1), alpha=0.15, color='red')
+            plt.xlabel("Training Set Size")
+            plt.ylabel("Accuracy")
+            plt.title(f"Learning Curve - {model_type.replace('_', ' ').title()}")
+            plt.legend(loc="lower right")
+            plt.grid()
+            plt.show()
+
+    # Save model
+    joblib.dump(clf, 'models/model.pkl')
+
+    # Final accuracy
     mean_correct_estim = np.mean(correct_estimations)
     print(f"Final mean accuracy: {mean_correct_estim:.4f}")
     return mean_correct_estim
-
 

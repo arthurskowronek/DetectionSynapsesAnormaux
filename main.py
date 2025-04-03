@@ -8,7 +8,7 @@ from crible_functions import *
 def test_model_accuracy(model_types):
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_118'
-    data = create_dataset(reimport_images=False, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=True, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False)#, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Convert to numpy arrays
     X = np.array(data['data'])
@@ -22,33 +22,44 @@ def test_model_accuracy(model_types):
     X_copy = X.copy()
     
     # ---------- Preprocessing ----------
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
     X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
     
     # ---------- Feature Reduction ----------
-    """# Scale features
+    # Scale features
     scaler = StandardScaler()
     X_features = scaler.fit_transform(X_features)
+    
+    # change NaN values to 0
+    X_features = np.nan_to_num(X_features)
     
     pca = PCA(n_components=4)
     X_features = pca.fit_transform(X_features)
     
     print(f"Explained variance ratio: {pca.explained_variance_ratio_}")
-    print(f"Explained variance: {pca.explained_variance_}")"""
+    print(f"Explained variance: {pca.explained_variance_}")
     
-    
+    # plot the feature space with the 2 first components and label each point by if it is a mutant or not
+    plt.figure(figsize=(10, 10))
+    plt.scatter(X_features[:, 0], X_features[:, 1], c=y, cmap='viridis', alpha=0.5)
+    plt.title('Feature space with PCA')
+    plt.xlabel('PCA 1')
+    plt.ylabel('PCA 2')
+    plt.colorbar(ticks=[0, 1], label='Label')
+    plt.clim(-0.5, 1.5)
+    plt.show()
     
     # ---------- Feature Selection ----------
     number_features_before = X_features.shape[1]
     
     # scale features
     scaler = StandardScaler()
-    X_features = scaler.fit_transform(X_features)
+    #X_features = scaler.fit_transform(X_features)
     
     # Here we choose the top k features 
-    X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
+    #X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
     
     number_features_after = X_features.shape[1]
     
