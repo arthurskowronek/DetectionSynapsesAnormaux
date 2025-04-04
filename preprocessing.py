@@ -398,7 +398,7 @@ def get_preprocess_images(recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     ndarray
         Preprocessed images
     """
-    preprocess_file = f'{Path(pkl_name).stem}_preprocessing.pkl'
+    preprocess_file = f'{Path(pkl_name).stem}.pkl' 
         
     
     # Try to load existing preprocessing

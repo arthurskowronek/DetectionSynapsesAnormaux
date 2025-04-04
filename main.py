@@ -7,8 +7,8 @@ from crible_functions import *
 
 def test_model_accuracy(model_types):
     # ---------- Load dataset ----------
-    filename_pkl_dataset = 'dataset_118'
-    data = create_dataset(reimport_images=True, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False)#, pkl_name=filename_pkl_dataset + '.pkl')
+    filename_pkl_dataset = 'dataset_2025-04-04_11-35-21'
+    data = create_dataset(reimport_images=False, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Convert to numpy arrays
     X = np.array(data['data'])
@@ -22,7 +22,8 @@ def test_model_accuracy(model_types):
     X_copy = X.copy()
     
     # ---------- Preprocessing ----------
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy, pkl_name=filename_pkl_dataset)
+    filename_pkl_dataset = 'dataset_2025-03-12_22-29-09_preprocessing_1'
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
     X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
@@ -35,7 +36,7 @@ def test_model_accuracy(model_types):
     # change NaN values to 0
     X_features = np.nan_to_num(X_features)
     
-    pca = PCA(n_components=4)
+    pca = PCA(n_components=2)
     X_features = pca.fit_transform(X_features)
     
     print(f"Explained variance ratio: {pca.explained_variance_ratio_}")
@@ -47,7 +48,7 @@ def test_model_accuracy(model_types):
     plt.title('Feature space with PCA')
     plt.xlabel('PCA 1')
     plt.ylabel('PCA 2')
-    plt.colorbar(ticks=[0, 1], label='Label')
+    plt.colorbar(ticks=[0, 1], label='Label') 
     plt.clim(-0.5, 1.5)
     plt.show()
     

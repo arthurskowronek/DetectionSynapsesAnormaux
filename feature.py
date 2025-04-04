@@ -488,7 +488,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
                     print(f"Warning: Error computing GLSZM features: {e}")
                 roi_features['A_GLSZM'] = np.zeros(14)
         
-        # ---------- B. Morphological Features ----------
+        # ---------- B. Morphological Features ---------- ? 
         if include_morphological:
             try:
                 # Grayscale Morphology
@@ -523,7 +523,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
                 roi_features['B_Morphological_Binary_M_cdf'] = np.zeros(30)
                 roi_features['B_Morphological_Binary_H_cdf'] = np.zeros(30)
         
-        # ---------- C. Histogram-based Features ----------
+        # ---------- C. Histogram-based Features ---------- ERRORS
         if include_histogram:
             try:
                 # Basic Histogram
@@ -551,7 +551,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
                     print(f"Warning: Error computing C Correlogram features: {e}")
                 roi_features['C_Correlogram'] = np.zeros(32 * 32)  # flattened correlogram
         
-        # ---------- D. Multi-scale Features ----------
+        # ---------- D. Multi-scale Features ---------- ERRORS
         if include_multiscale:
             try:
                 # Discrete Wavelet Transform
@@ -596,7 +596,7 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
                     print(f"Warning: Error computing multi-scale D_AMFM features: {e}")
                 roi_features['D_AMFM'] = np.zeros(12)  # AMFM feature dimension
         
-        # ---------- E. Other Features ----------
+        # ---------- E. Other Features ---------- ERRORS
         if include_other:
             try:
                 # HOG Features
@@ -992,7 +992,7 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
         
             component, label_seg = get_regions_of_interest(maxima, image_original, mask)
             feat = create_feature_vector(image, component, intensity[im_num], n_bins, 
-                                         include_texture=True, include_morphological=False,
+                                         include_texture=False, include_morphological=False,
                                          include_histogram=False, include_multiscale=False,
                                          include_other=False)
             
