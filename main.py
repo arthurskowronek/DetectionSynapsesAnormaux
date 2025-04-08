@@ -23,7 +23,7 @@ def test_model_accuracy(model_types):
     
     # ---------- Preprocessing ----------
     filename_pkl_dataset = 'dataset_2025-03-12_22-29-09_preprocessing_1'
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(method=2, recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
     X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
@@ -121,7 +121,7 @@ def test_pipeline():
     
     # ---------- Preprocessing ----------
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     
     #X_hist = get_histogram_vector(X_preprocessed)
@@ -170,7 +170,7 @@ def crible_genetique():
     
     # ---------- Preprocessing ----------
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
     X_features, features = get_feature_vector(X_preprocessed, y, X_copy, maxima, mask, intensity, recompute=True)
@@ -257,11 +257,11 @@ if __name__ == "__main__":
     # ---------- Test model accuracy ----------
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
     model_types = ['hist_gradient_boosting']
-    test_model_accuracy(model_types)
+    #test_model_accuracy(model_types)
     
     
     # ---------- Test pipeline ----------
-    #test_pipeline()
+    test_pipeline()
     
     
     # ---------- Test crible genetique ----------

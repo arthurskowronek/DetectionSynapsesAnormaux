@@ -767,8 +767,6 @@ def get_synapse_centers_using_hessian(region, image, sigma=2):
 
 def get_regions_of_interest(coord, image_original, binary_mask):
     
-    #print(f"Detected {len(coord)} synapse centers")
-    
     # Step 1: Initial rough segmentation
     image_markers = np.zeros_like(image_original, dtype=np.int32)
     for i, (x, y) in enumerate(coord, 1):  # Start at 1 (0 is background)
