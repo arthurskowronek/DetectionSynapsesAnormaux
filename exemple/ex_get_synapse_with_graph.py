@@ -65,45 +65,69 @@ def graph_to_skeleton(G, node_to_coord, shape=None):
 def find_endpoints(G):
     return [n for n in G.nodes if G.degree[n] == 1]
 
-def get_longest_path(G):
-    endpoints = find_endpoints(G)
-    max_len = 0
-    longest_path = []
-
-    for i in range(len(endpoints)):
-        for j in range(i+1, len(endpoints)):
-            try:
-                path = nx.shortest_path(G, endpoints[i], endpoints[j])
-                if len(path) > max_len:
-                    max_len = len(path)
-                    longest_path = path
-            except nx.NetworkXNoPath:
-                continue
-    return longest_path
-
-def skeleton_keep_main_branch(skel, keep=1):
+def skeleton_keep_main_branch(skel, maxima_coords, skeletonize = False, keep=1):
     G = skeleton_to_graph(skel)
     endpoints = find_endpoints(G)
+    
+    # show endpoints
+    plt.figure(figsize=(8, 8))
+    plt.imshow(skel, cmap='gray')
+    for y, x in endpoints:
+        plt.scatter(x, y, color='red', s=10)
+    plt.title("Endpoints")
+    plt.show()
 
-    all_paths = []
+    all_paths_dict = {}
+
     for i in range(len(endpoints)):
         for j in range(i + 1, len(endpoints)):
             try:
                 path = nx.shortest_path(G, endpoints[i], endpoints[j])
-                all_paths.append(path)
+                
+                # Count how many points in the path are also in maxima_coords
+                maxima_count = 0
+                path_points = set(path)  # Convert to set for faster lookups
+                
+                # If maxima_coords is a numpy array of coordinates like [(y1,x1), (y2,x2), ...]
+                for point in maxima_coords:
+                    if tuple(point) in path_points:
+                        maxima_count += 1
+                
+                # Create a unique key for each path
+                path_key = f"path_{endpoints[i]}_{endpoints[j]}"
+                
+                # Store the path, node count, and maxima count
+                all_paths_dict[path_key] = {
+                    "path": path,
+                    "maxima_count": maxima_count,
+                    "length": len(path)
+                }
             except nx.NetworkXNoPath:
                 continue
 
-    # Sort by path length, descending
-    all_paths.sort(key=len, reverse=True)
+    # Sort paths by node count, descending
+    if skeletonize == False:
+        sorted_paths = sorted(all_paths_dict.items(), key=lambda x: x[1]["maxima_count"], reverse=True)
+    else: # on veut le plus grand squelette, pas celui qui traverse le plus de maxima
+        sorted_paths = sorted(all_paths_dict.items(), key=lambda x: x[1]["length"], reverse=True)
+
+    # Show all paths and print their length
+    for i, (path_key, path_data) in enumerate(sorted_paths):
+        print(f"Path {i}: Length = {path_data['maxima_count']}")
+        plt.figure(figsize=(8, 8))
+        plt.imshow(skel, cmap='gray')
+        for y, x in path_data["path"]:
+            plt.scatter(x, y, color='red', s=1)
+        plt.title(f"Path {i}")
+        plt.show()
 
     selected_paths = []
-
     if keep == 1:
-        if all_paths:
-            selected_paths = [all_paths[0]]
+        if sorted_paths:
+            selected_paths = [sorted_paths[0][1]["path"]]
     elif keep == 2:
-        for path in all_paths:
+        for _, path_data in sorted_paths:
+            path = path_data["path"]
             used_nodes = set(n for p in selected_paths for n in p)
             if not used_nodes.intersection(path):
                 selected_paths.append(path)
@@ -115,7 +139,6 @@ def skeleton_keep_main_branch(skel, keep=1):
     for path in selected_paths:
         for y, x in path:
             main_branch[y, x] = True
-
     return G, main_branch
 
 def order_skeleton_points_skan(skeleton):
@@ -378,7 +401,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     # 1. Skeletonize the worm
     skeleton = ski.morphology.skeletonize(worm_mask)
     
-    G, skeleton = skeleton_keep_main_branch(skeleton, keep=1)
+    G, skeleton = skeleton_keep_main_branch(skeleton, maxima_coords, skeletonize = True, keep=1)
     
     # plot
     """plt.figure(figsize=(8, 8))
@@ -633,12 +656,16 @@ def get_synapses_graph(worm_mask, maxima_coords):
             
             vec = p2 - p1
             dist = np.linalg.norm(vec)
+        
             if dist == 0:
                 continue
 
             vec_normed = vec / dist
             dot = np.dot(vec_normed, dir_vec)
 
+            """if abs(slices1 - labels_slice[j]) != 0: # different slice
+                dist = dist * 2 # penalize the distance if the points are in different slices"""
+                
             if dot > 0.9 and dist < min_dist:
                 best_j = j
                 min_dist = dist
@@ -687,7 +714,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.show()
     
     # 10. Keep only the NUMBER_OF_CORDS main branches of the skeleton
-    G, skeleton = skeleton_keep_main_branch(skeleton, keep=NUMBER_OF_CORDS)
+    G, skeleton = skeleton_keep_main_branch(skeleton, maxima_coords, skeletonize = False, keep=NUMBER_OF_CORDS)
     
     # 11. Plot the skeleton
     plt.figure(figsize=(8, 8))
@@ -719,6 +746,7 @@ if __name__ == "__main__":
     list_of_images = os.listdir(path_directory)
     
     for image in list_of_images:        
+        image = "EN6009-12_MMStack.ome.tif"
         image_path = os.path.join(path_directory, image)
         print(f"---------- Processing {image_path} ----------")
     
