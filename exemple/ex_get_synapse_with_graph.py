@@ -261,8 +261,7 @@ def worm_segmentation(img):
     
     return worm_mask
 
-def segment_synapses(image_path, threshold_percentile=95, connectivity_angle_threshold=30, 
-                     max_distance=20, min_connections=1):
+def preprocessing(image_path, threshold_percentile=95):
     """
     Segment synapses in C. elegans fluorescent images.
     
@@ -375,7 +374,6 @@ def segment_synapses(image_path, threshold_percentile=95, connectivity_angle_thr
 def get_synapses_graph(worm_mask, maxima_coords):
     
     NUMBER_OF_SEGMENTS = 15
-    NUMBER_OF_CUT = 2
     
     # 1. Skeletonize the worm
     skeleton = ski.morphology.skeletonize(worm_mask)
@@ -389,11 +387,6 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.show()"""
     
     # 2. Get ordered skeleton coordinates
-    skel_coords = np.column_stack(np.nonzero(skeleton))
-    
-    endpoints = find_endpoints(G)
-    
-    # Order the skeleton pixels
     skel_path = order_skeleton_points_skan(skeleton)
 
     # 3. Divide skeleton into N segments
@@ -589,6 +582,19 @@ def get_synapses_graph(worm_mask, maxima_coords):
         plt.legend()
         plt.show()"""
 
+    # print numbers of points in each slice
+    print("Number of points in each slice:")
+    for i in range(6):
+        print(f"Slice {i}: {np.sum(labels_slice == i)}")
+    
+    
+    # Decide number of cords based on the number of maxima in each slice
+    if np.sum(np.isin(labels_slice, [0, 1])) > len(maxima_coords) / 4 and np.sum(np.isin(labels_slice, [4, 5])) > len(maxima_coords) / 4:
+        NUMBER_OF_CORDS = 2
+    else:
+        NUMBER_OF_CORDS = 1
+    
+    print("Number of cords:", NUMBER_OF_CORDS)
 
     # 6. Plot maxima with their assigned slice
     plt.figure(figsize=(8, 8))
@@ -604,8 +610,6 @@ def get_synapses_graph(worm_mask, maxima_coords):
                 c=node_colors, s=10, alpha=1)
     plt.title("Maxima with Assigned Slices")
     plt.show()
-    
-    
     
 
                
@@ -682,13 +686,13 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.title("Skeleton from Graph")
     plt.show()
     
-    # 10. Keep only the 2 main branches of the skeleton
-    G, skeleton = skeleton_keep_main_branch(skeleton, keep=2)
+    # 10. Keep only the NUMBER_OF_CORDS main branches of the skeleton
+    G, skeleton = skeleton_keep_main_branch(skeleton, keep=NUMBER_OF_CORDS)
     
     # 11. Plot the skeleton
     plt.figure(figsize=(8, 8))
     plt.imshow(skeleton, cmap='gray')
-    plt.title("Skeleton of Worm (Main Branches)")
+    plt.title(f"Skeleton of Worm ({NUMBER_OF_CORDS} Branches)")
     plt.show()    
     
     # keep only nodes that are in skeleton
@@ -713,20 +717,21 @@ if __name__ == "__main__":
     path_directory = "data/WildType 2023_12_22"
     path_directory = "data/Mut0 2023_12_22"
     list_of_images = os.listdir(path_directory)
-    random_image = np.random.choice(list_of_images)
-    image_path = os.path.join(path_directory, random_image)
-    print("Image name:", random_image)
-        
-    # Segment synapses
-    img, frangi_response, mask, local_max, filtered_maxima = segment_synapses(
-        image_path, 
-        threshold_percentile=95,
-        connectivity_angle_threshold=30,
-        max_distance=20,
-        min_connections=1
-    )
+    
+    for image in list_of_images:        
+        image_path = os.path.join(path_directory, image)
+        print(f"---------- Processing {image_path} ----------")
+    
+        try:
+            # Preprocessing
+            img, frangi_response, mask, local_max, filtered_maxima = preprocessing(image_path,threshold_percentile=95)
 
-        
-    worm_mask = worm_segmentation(img)
+            # Segmentation  
+            worm_mask = worm_segmentation(img)
 
-    centers, labels, directions, G = get_synapses_graph(worm_mask, filtered_maxima)
+            # Get synapses graph
+            centers, labels, directions, G = get_synapses_graph(worm_mask, filtered_maxima)
+            
+        except Exception as e:
+            print(f"Error processing {image_path}: {e}")
+            continue
