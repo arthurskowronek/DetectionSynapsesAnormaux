@@ -780,6 +780,8 @@ def get_regions_of_interest(coord, image_original, binary_mask):
         minr, minc, maxr, maxc = region.bbox  # Get bounding box of region
         mask = (rough_segmented[minr:maxr, minc:maxc] == region.label)  # Extract the region
         
+        # blurred image
+        blurred_image = ski.filters.gaussian(image_original[minr:maxr, minc:maxc], sigma=1)
         
         # Step 3: Compute mean boundary intensity
         boundary = ski.morphology.dilation(mask, ski.morphology.disk(1)) ^ mask  # Find boundary pixels

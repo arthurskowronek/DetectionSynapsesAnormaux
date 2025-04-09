@@ -723,19 +723,19 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.show()    
     
     # keep only nodes that are in skeleton
-    nodes = np.array([node for node in maxima_coords if skeleton[node[0], node[1]] == 1])
+    maxima = np.array([node for node in maxima_coords if skeleton[node[0], node[1]] == 1])
         
-    print("Number of nodes in the final graph:", len(nodes))
+    print("Number of nodes in the final graph:", len(maxima))
     # plot image with maxima_filtered
     plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
-    plt.scatter(nodes[:, 1], nodes[:, 0], s=1, color='red')
+    plt.scatter(maxima[:, 1], maxima[:, 0], s=1, color='red')
     #for i in range(len(nodes)):
         #plt.scatter(nodes[i][1], nodes[i][0], s=1, color='red')
     plt.title("Maxima Coordinates")
     plt.show()
 
-    return centers, labels, directions, G
+    return maxima
 
 
 # Example usage
@@ -746,7 +746,6 @@ if __name__ == "__main__":
     list_of_images = os.listdir(path_directory)
     
     for image in list_of_images:        
-        image = "EN6009-12_MMStack.ome.tif"
         image_path = os.path.join(path_directory, image)
         print(f"---------- Processing {image_path} ----------")
     
@@ -758,7 +757,7 @@ if __name__ == "__main__":
             worm_mask = worm_segmentation(img)
 
             # Get synapses graph
-            centers, labels, directions, G = get_synapses_graph(worm_mask, filtered_maxima)
+            maxima = get_synapses_graph(worm_mask, filtered_maxima)
             
         except Exception as e:
             print(f"Error processing {image_path}: {e}")
