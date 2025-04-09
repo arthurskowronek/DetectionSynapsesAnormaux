@@ -25,6 +25,7 @@ from scipy.spatial import distance_matrix
 from skimage.feature import graycomatrix, graycoprops, hog
 from skimage.color import label2rgb
 
+import scipy
 
 
 from constants import *
@@ -774,15 +775,18 @@ def get_regions_of_interest(coord, image_original, binary_mask):
     
     rough_segmented = ski.segmentation.watershed(-image_original, connectivity=1, markers=image_markers, mask=binary_mask)
     refined_segmented = np.zeros_like(rough_segmented)
+    
+    real_image = image_original.copy()
+    
+    # blurring the image
+    image_original = ski.filters.gaussian(image_original, sigma=0.5)
  
     for region in ski.measure.regionprops(rough_segmented, intensity_image=image_original):
         
         minr, minc, maxr, maxc = region.bbox  # Get bounding box of region
         mask = (rough_segmented[minr:maxr, minc:maxc] == region.label)  # Extract the region
         
-        # blurred image
-        blurred_image = ski.filters.gaussian(image_original[minr:maxr, minc:maxc], sigma=1)
-        
+
         # Step 3: Compute mean boundary intensity
         boundary = ski.morphology.dilation(mask, ski.morphology.disk(1)) ^ mask  # Find boundary pixels
         if image_original[minr:maxr, minc:maxc][boundary].size > 0:
@@ -892,12 +896,53 @@ def get_regions_of_interest(coord, image_original, binary_mask):
         # Step 6: Determine foreground and update segmentation
         refined_region = labels.reshape(mask.shape)
         foreground_label = np.argmax([np.mean(I[refined_region == 0]), np.mean(I[refined_region == 1])])
+        foreground_mask = (refined_region == foreground_label)
 
+        # show foreground mask
+        """plt.figure(figsize=(8, 6))
+        plt.imshow(foreground_mask, cmap='gray')
+        plt.title(f"Foreground mask for region {region.label}")
+        plt.axis('off')
+        plt.show()"""
+
+        # Keep only the largest connected component in the foreground        
+        labeled_fg = ski.measure.label(foreground_mask, connectivity=1)
+        regions = ski.measure.regionprops(labeled_fg)
+        if regions:
+            largest_region = max(regions, key=lambda r: r.area)
+            largest_component_mask = (labeled_fg == largest_region.label)
+            filled_component_mask = scipy.ndimage.binary_fill_holes(largest_component_mask) 
+        else:
+            filled_component_mask = np.zeros_like(foreground_mask)
+
+        # Update refined mask
         refined_mask = np.zeros_like(mask, dtype=np.int32)
-        refined_mask[refined_region == foreground_label] = region.label  # Keep the correct label
+        refined_mask[filled_component_mask] = region.label
+        
 
         # Place refined region in final segmented image
         refined_segmented[minr:maxr, minc:maxc][refined_mask > 0] = region.label
+        
+        
+        # Plot the original image, filled_component_mask
+        """fig, axes = plt.subplots(1, 3, figsize=(24, 8)) # 1 row, 3 columns
+        # Visualize original image (first subplot)
+        axes[0].imshow(real_image[minr:maxr, minc:maxc], cmap='gray')
+        axes[0].set_title(f"Original Image with Region {region.label}")
+        axes[0].axis('off') # Turn off axis labels and ticks
+        # Visualize original image (first subplot) only in the region of interest
+        axes[1].imshow(image_original[minr:maxr, minc:maxc], cmap='gray')
+        axes[1].set_title(f"Original Image with Region {region.label}")
+        axes[1].axis('off') # Turn off axis labels and ticks
+        # Visualize foreground mask (second subplot)
+        axes[2].imshow(filled_component_mask, cmap='gray')
+        axes[2].set_title(f"Filled Component Mask for Region {region.label}")
+        axes[2].axis('off')
+        # Adjust layout to prevent overlapping titles
+        plt.tight_layout()
+        # Show the combined image
+        plt.show()"""
+        
         
         
         """# Create a figure with a specified size for the combined image
