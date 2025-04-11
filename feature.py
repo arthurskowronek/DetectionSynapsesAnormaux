@@ -16,6 +16,7 @@ from sklearn.linear_model import LassoCV
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.cluster import KMeans
 from feature_engine.selection import MRMR
+import warnings
 
 from constants import *
 
@@ -346,6 +347,44 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
     # and then aggregate them (mean, std, etc.)
     component_features = []
     
+    # Define expected dimensions for each feature type
+    # This will help us handle inconsistencies
+    expected_dimensions = {
+        'A_FOS': 16,
+        'A_GLCM': 13,
+        'A_GLDS': 5,
+        'A_NGTDM': 5,
+        'A_SFM': 4,
+        'A_LTE': 6,
+        'A_FDTA': 4,
+        'A_GLRLM': 11,
+        'A_FPS': 2,
+        'A_Shape_Parameters': 5,
+        'A_HOS': 2,
+        'A_LBP': 6,
+        'A_GLSZM': 14,
+        'B_Morphological_Grayscale_pdf': 30,
+        'B_Morphological_Grayscale_cdf': 30,
+        'B_Morphological_Binary_L_pdf': 30,
+        'B_Morphological_Binary_M_pdf': 30,
+        'B_Morphological_Binary_H_pdf': 30,
+        'B_Morphological_Binary_L_cdf': 30,
+        'B_Morphological_Binary_M_cdf': 30,
+        'B_Morphological_Binary_H_cdf': 30,
+        'C_Histogram': 32,
+        'C_MultiregionHistogram': 32 * 4,  # 128
+        'C_Correlogram': 32 * 32,          # 1024
+        'D_DWT': 7 * 3 * 4,                # 84
+        'D_SWT': 7 * 3 * 4,                # 84 
+        'D_WP': 7 * (4**3),                # 7 * 64 = 448
+        'D_GT': 7 * 4 * 6,                 # 168
+        'D_AMFM': 12,
+        'E_HOG': 36,
+        'E_HuMoments': 7,
+        'E_TAS': 9,
+        'E_ZernikesMoments': 25
+    }
+    
     for prop in component_props:
         # Extract ROI using bounding box from regionprops
         minr, minc, maxr, maxc = prop.bbox
@@ -357,121 +396,839 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
         
         # ---------- A. Texture Features ----------
         if include_texture:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # Ignore tous les warnings à l'intérieur du bloc
+                try:
+                    pass  # Add the code to execute here
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: An error occurred: {e}")
+                    # First Order Statistics
+                    features, name = pyfeats.fos(roi_intensity, roi_mask)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_FOS']:
+                        if verbose_warning:
+                            print(f"Warning: FOS features dimension mismatch. Expected {expected_dimensions['A_FOS']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_FOS'])
+                    roi_features['A_FOS'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing FOS features: {e}")
+                    roi_features['A_FOS'] = np.zeros(expected_dimensions['A_FOS'])
+                    
+                try:    
+                    # Gray Level Co-occurrence Matrix
+                    features, name = pyfeats.glcm_features(roi_intensity, ignore_zeros=True)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_GLCM']:
+                        if verbose_warning:
+                            print(f"Warning: GLCM features dimension mismatch. Expected {expected_dimensions['A_GLCM']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_GLCM'])
+                    roi_features['A_GLCM'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing GLCM features: {e}")
+                    roi_features['A_GLCM'] = np.zeros(expected_dimensions['A_GLCM'])
+                    
+                try:     
+                    # Gray Level Difference Statistics
+                    features, name = pyfeats.glds_features(roi_intensity, roi_mask, 
+                                                                Dx=[0,1,1,1], Dy=[1,1,0,-1])
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_GLDS']:
+                        if verbose_warning:
+                            print(f"Warning: GLDS features dimension mismatch. Expected {expected_dimensions['A_GLDS']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_GLDS'])
+                    roi_features['A_GLDS'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing GLDS features: {e}")
+                    roi_features['A_GLDS'] = np.zeros(expected_dimensions['A_GLDS'])
+                    
+                try:     
+                    # Neighborhood Gray Tone Difference Matrix
+                    features, name = pyfeats.ngtdm_features(roi_intensity, roi_mask, d=1)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_NGTDM']:
+                        if verbose_warning:
+                            print(f"Warning: NGTDM features dimension mismatch. Expected {expected_dimensions['A_NGTDM']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_NGTDM'])
+                    roi_features['A_NGTDM'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing NGTDM features: {e}")
+                    roi_features['A_NGTDM'] = np.zeros(expected_dimensions['A_NGTDM'])
+                    
+                try:     
+                    # Statistical Feature Matrix
+                    features, name = pyfeats.sfm_features(roi_intensity, roi_mask, Lr=4, Lc=4)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_SFM']:
+                        if verbose_warning:
+                            print(f"Warning: SFM features dimension mismatch. Expected {expected_dimensions['A_SFM']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_SFM'])
+                    roi_features['A_SFM'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing SFM features: {e}")
+                    roi_features['A_SFM'] = np.zeros(expected_dimensions['A_SFM'])
+                    
+                try:     
+                    # Laws Texture Energy
+                    features, name = pyfeats.lte_measures(roi_intensity, roi_mask, l=7)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_LTE']:
+                        if verbose_warning:
+                            print(f"Warning: LTE features dimension mismatch. Expected {expected_dimensions['A_LTE']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_LTE'])
+                    roi_features['A_LTE'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing LTE features: {e}")
+                    roi_features['A_LTE'] = np.zeros(expected_dimensions['A_LTE'])
+                    
+                try:     
+                    # Fractal Dimension Texture Analysis
+                    features, name = pyfeats.fdta(roi_intensity, roi_mask, s=3)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_FDTA']:
+                        if verbose_warning:
+                            print(f"Warning: FDTA features dimension mismatch. Expected {expected_dimensions['A_FDTA']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_FDTA'])
+                    roi_features['A_FDTA'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing FDTA features: {e}")
+                    roi_features['A_FDTA'] = np.zeros(expected_dimensions['A_FDTA'])
+                    
+                try:     
+                    # Gray Level Run Length Matrix
+                    features, name = pyfeats.glrlm_features(roi_intensity, roi_mask, Ng=256)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_GLRLM']:
+                        if verbose_warning:
+                            print(f"Warning: GLRLM features dimension mismatch. Expected {expected_dimensions['A_GLRLM']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_GLRLM'])
+                    roi_features['A_GLRLM'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing GLRLM features: {e}")
+                    roi_features['A_GLRLM'] = np.zeros(expected_dimensions['A_GLRLM'])
+                    
+                try:     
+                    # Fourier Power Spectrum
+                    features, name = pyfeats.fps(roi_intensity, roi_mask)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_FPS']:
+                        if verbose_warning:
+                            print(f"Warning: FPS features dimension mismatch. Expected {expected_dimensions['A_FPS']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_FPS'])
+                    roi_features['A_FPS'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing FPS features: {e}")
+                    roi_features['A_FPS'] = np.zeros(expected_dimensions['A_FPS'])
+                    
+                try:     
+                    # Shape Parameters
+                    # Calculate perimeter first
+                    perimeter = prop.perimeter
+                    features, name = pyfeats.shape_parameters(
+                        roi_intensity, roi_mask, perimeter, pixels_per_mm2=1)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_Shape_Parameters']:
+                        if verbose_warning:
+                            print(f"Warning: Shape Parameters features dimension mismatch. Expected {expected_dimensions['A_Shape_Parameters']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_Shape_Parameters'])
+                    roi_features['A_Shape_Parameters'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing shape parameters features: {e}")
+                    roi_features['A_Shape_Parameters'] = np.zeros(expected_dimensions['A_Shape_Parameters'])
+                    
+                try:     
+                    # Higher Order Spectra
+                    # Using adaptive thresholds based on intensity range
+                    intensity_min = np.min(roi_intensity)
+                    intensity_max = np.max(roi_intensity)
+                    th_low = intensity_min + 0.4 * (intensity_max - intensity_min)
+                    th_high = intensity_min + 0.6 * (intensity_max - intensity_min)
+                    features, name = pyfeats.hos_features(roi_intensity, th=[th_low, th_high])
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_HOS']:
+                        if verbose_warning:
+                            print(f"Warning: HOS features dimension mismatch. Expected {expected_dimensions['A_HOS']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_HOS'])
+                    roi_features['A_HOS'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing HOS features: {e}")
+                    roi_features['A_HOS'] = np.zeros(expected_dimensions['A_HOS'])
+                    
+                try:     
+                    # Local Binary Patterns
+                    roi_int_uint8 = (roi_intensity * 255 / roi_intensity.max()).astype(np.uint8)
+                    features, name = pyfeats.lbp_features(roi_int_uint8, roi_int_uint8, 
+                                                                P=[8,16,24], R=[1,2,3]) 
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_LBP']:
+                        if verbose_warning:
+                            print(f"Warning: LBP features dimension mismatch. Expected {expected_dimensions['A_LBP']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_LBP'])
+                    roi_features['A_LBP'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing LPB features: {e}")
+                    roi_features['A_LBP'] = np.zeros(expected_dimensions['A_LBP'])
+                    
+                try:     
+                    # Gray Level Size Zone Matrix
+                    features, name = pyfeats.glszm_features(roi_intensity, roi_mask) 
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    # Ensure correct dimension
+                    if len(features) != expected_dimensions['A_GLSZM']:
+                        if verbose_warning:
+                            print(f"Warning: GLSZM features dimension mismatch. Expected {expected_dimensions['A_GLSZM']}, got {len(features)}")
+                        features = np.zeros(expected_dimensions['A_GLSZM'])
+                    roi_features['A_GLSZM'] = features  
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing GLSZM features: {e}")
+                    roi_features['A_GLSZM'] = np.zeros(expected_dimensions['A_GLSZM'])
+            
+        # ---------- B. Morphological Features ---------- 
+        if include_morphological:
             try:
-                # First Order Statistics
-                roi_features['A_FOS'], name = pyfeats.fos(roi_intensity, roi_mask)
+                # Grayscale Morphology
+                pdf_features, cdf_features = pyfeats.grayscale_morphology_features(roi_intensity, N=30)
+                
+                # Ensure correct dimensions
+                if len(pdf_features) != expected_dimensions['B_Morphological_Grayscale_pdf']:
+                    if verbose_warning:
+                        print(f"Warning: Grayscale Morphology PDF features dimension mismatch. Expected {expected_dimensions['B_Morphological_Grayscale_pdf']}, got {len(pdf_features)}")
+                    pdf_features = np.zeros(expected_dimensions['B_Morphological_Grayscale_pdf'])
+                
+                if len(cdf_features) != expected_dimensions['B_Morphological_Grayscale_cdf']:
+                    if verbose_warning:
+                        print(f"Warning: Grayscale Morphology CDF features dimension mismatch. Expected {expected_dimensions['B_Morphological_Grayscale_cdf']}, got {len(cdf_features)}")
+                    cdf_features = np.zeros(expected_dimensions['B_Morphological_Grayscale_cdf'])
+                
+                roi_features['B_Morphological_Grayscale_pdf'] = pdf_features
+                roi_features['B_Morphological_Grayscale_cdf'] = cdf_features
             except Exception as e:
                 if verbose_warning:
-                    print(f"Warning: Error computing FOS features: {e}")
-                roi_features['A_FOS'] = np.zeros(16)
+                    print(f"Warning: Error computing morphological grayscale features: {e}")
+                roi_features['B_Morphological_Grayscale_pdf'] = np.zeros(expected_dimensions['B_Morphological_Grayscale_pdf'])
+                roi_features['B_Morphological_Grayscale_cdf'] = np.zeros(expected_dimensions['B_Morphological_Grayscale_cdf'])
+
+            # Désactiver temporairement les RuntimeWarnings ici
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                try:    
+                    # Multi-level Binary Morphology
+                    intensity_min = np.min(roi_intensity)
+                    intensity_max = np.max(roi_intensity)
+                    th_low = intensity_min + 0.25 * (intensity_max - intensity_min)
+                    th_high = intensity_min + 0.5 * (intensity_max - intensity_min)
+
+                    L_pdf, M_pdf, H_pdf, L_cdf, M_cdf, H_cdf = pyfeats.multilevel_binary_morphology_features(
+                        roi_intensity, roi_mask, N=30, thresholds=[th_low, th_high])
+                    
+                    # Ensure correct dimensions for each output
+                    binary_features = {
+                        'B_Morphological_Binary_L_pdf': L_pdf,
+                        'B_Morphological_Binary_M_pdf': M_pdf,
+                        'B_Morphological_Binary_H_pdf': H_pdf,
+                        'B_Morphological_Binary_L_cdf': L_cdf,
+                        'B_Morphological_Binary_M_cdf': M_cdf,
+                        'B_Morphological_Binary_H_cdf': H_cdf
+                    }
+                    
+                    for key, features in binary_features.items():
+                        if len(features) != expected_dimensions[key]:
+                            if verbose_warning:
+                                print(f"Warning: {key} features dimension mismatch. Expected {expected_dimensions[key]}, got {len(features)}")
+                            features = np.zeros(expected_dimensions[key])
+                        roi_features[key] = features
+                        
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing morphological Binary features: {e}")
+                    roi_features['B_Morphological_Binary_L_pdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_L_pdf'])
+                    roi_features['B_Morphological_Binary_M_pdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_M_pdf'])
+                    roi_features['B_Morphological_Binary_H_pdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_H_pdf'])
+                    roi_features['B_Morphological_Binary_L_cdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_L_cdf'])
+                    roi_features['B_Morphological_Binary_M_cdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_M_cdf'])
+                    roi_features['B_Morphological_Binary_H_cdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_H_cdf'])
+                    
+        # ---------- C. Histogram-based Features ---------- 
+        if include_histogram:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    hist_features = pyfeats.histogram(roi_intensity, roi_mask, bins=32)
+                    hist_features = hist_features.astype(float)
+                    
+                    # Ensure correct dimension
+                    if len(hist_features) != expected_dimensions['C_Histogram']:
+                        if verbose_warning:
+                            print(f"Warning: Histogram features dimension mismatch. Expected {expected_dimensions['C_Histogram']}, got {len(hist_features)}")
+                        hist_features = np.zeros(expected_dimensions['C_Histogram'], dtype=float)
+                    
+                    roi_features['C_Histogram'] = hist_features
+            except Exception as e:
+                if verbose_warning:
+                    print(f"Warning: Error computing C histogram features: {e}")
+                roi_features['C_Histogram'] = np.zeros(expected_dimensions['C_Histogram'], dtype=float)
+                        
+            try:    
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    multiregion_features = pyfeats.multiregion_histogram(
+                        roi_intensity, roi_mask, bins=32, num_eros=3, square_size=3)
+                    multiregion_features = multiregion_features.astype(float)
+                    
+                    # Ensure correct dimension
+                    if len(multiregion_features) != expected_dimensions['C_MultiregionHistogram']:
+                        if verbose_warning:
+                            print(f"Warning: MultiregionHistogram features dimension mismatch. Expected {expected_dimensions['C_MultiregionHistogram']}, got {len(multiregion_features)}")
+                        multiregion_features = np.zeros(expected_dimensions['C_MultiregionHistogram'], dtype=float)
+                    
+                    roi_features['C_MultiregionHistogram'] = multiregion_features
+            except Exception as e:
+                if verbose_warning:
+                    print(f"Warning: Error computing C MultiregionHistogram features: {e}")
+                roi_features['C_MultiregionHistogram'] = np.zeros(expected_dimensions['C_MultiregionHistogram'], dtype=float)
                 
             try:    
-                # Gray Level Co-occurrence Matrix
-                roi_features['A_GLCM'], name = pyfeats.glcm_features(roi_intensity, ignore_zeros=True)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    correlogram_features = pyfeats.correlogram(
+                        roi_intensity, roi_mask, bins_digitize=32, bins_hist=32, flatten=True)
+                    correlogram_features = correlogram_features.astype(float)
+                    
+                    # Ensure correct dimension
+                    if len(correlogram_features) != expected_dimensions['C_Correlogram']:
+                        if verbose_warning:
+                            print(f"Warning: Correlogram features dimension mismatch. Expected {expected_dimensions['C_Correlogram']}, got {len(correlogram_features)}")
+                        correlogram_features = np.zeros(expected_dimensions['C_Correlogram'], dtype=float)
+                    
+                    roi_features['C_Correlogram'] = correlogram_features
             except Exception as e:
                 if verbose_warning:
-                    print(f"Warning: Error computing GLCM features: {e}")
-                roi_features['A_GLCM'] = np.zeros(13)
-                
-            try:     
-                # Gray Level Difference Statistics
-                roi_features['A_GLDS'], name = pyfeats.glds_features(roi_intensity, roi_mask, 
-                                                              Dx=[0,1,1,1], Dy=[1,1,0,-1])
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing GLDS features: {e}")
-                roi_features['A_GLDS'] = np.zeros(5)
-                
-            try:     
-                # Neighborhood Gray Tone Difference Matrix
-                roi_features['A_NGTDM'], name = pyfeats.ngtdm_features(roi_intensity, roi_mask, d=1)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing NGTDM features: {e}")
-                roi_features['A_NGTDM'] = np.zeros(5)
-                
-            try:     
-                # Statistical Feature Matrix
-                roi_features['A_SFM'], name = pyfeats.sfm_features(roi_intensity, roi_mask, Lr=4, Lc=4)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing SFM features: {e}")
-                roi_features['A_SFM'] = np.zeros(4)
-                
-            try:     
-                # Laws Texture Energy
-                roi_features['A_LTE'], name = pyfeats.lte_measures(roi_intensity, roi_mask, l=7)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing LTE features: {e}")
-                roi_features['A_LTE'] = np.zeros(6)
-                
-            try:     
-                # Fractal Dimension Texture Analysis
-                roi_features['A_FDTA'], name = pyfeats.fdta(roi_intensity, roi_mask, s=3)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing FDTA features: {e}")
-                roi_features['A_FDTA'] = np.zeros(4)
-                
-            try:     
-                # Gray Level Run Length Matrix
-                roi_features['A_GLRLM'], name = pyfeats.glrlm_features(roi_intensity, roi_mask, Ng=256)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing GLRLM features: {e}")
-                roi_features['A_GLRLM'] = np.zeros(11)
-                
-            try:     
-                # Fourier Power Spectrum
-                roi_features['A_FPS'], name = pyfeats.fps(roi_intensity, roi_mask)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing FPS features: {e}")
-                roi_features['A_FPS'] = np.zeros(2)
-                
-            try:     
-                # Shape Parameters
-                # Calculate perimeter first
-                perimeter = prop.perimeter
-                roi_features['A_Shape_Parameters'], name = pyfeats.shape_parameters(
-                    roi_intensity, roi_mask, perimeter, pixels_per_mm2=1)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing shape parameters features: {e}")
-                roi_features['A_Shape_Parameters'] = np.zeros(5)
-                
-            try:     
-                # Higher Order Spectra
-                # Using adaptive thresholds based on intensity range
-                intensity_min = np.min(roi_intensity)
-                intensity_max = np.max(roi_intensity)
-                th_low = intensity_min + 0.4 * (intensity_max - intensity_min)
-                th_high = intensity_min + 0.6 * (intensity_max - intensity_min)
-                roi_features['A_HOS'], name = pyfeats.hos_features(roi_intensity, th=[th_low, th_high])
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing HOS features: {e}")
-                roi_features['A_HOS'] = np.zeros(2)
-                
-            try:     
-                # Local Binary Patterns
-                roi_features['A_LBP'], name = pyfeats.lbp_features(roi_intensity, roi_intensity, 
-                                                            P=[8,16,24], R=[1,2,3])
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing LPB features: {e}")
-                roi_features['A_LBP'] = np.zeros(6)
-                
-            try:     
-                # Gray Level Size Zone Matrix
-                roi_features['A_GLSZM'], name = pyfeats.glszm_features(roi_intensity, roi_mask)   
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing GLSZM features: {e}")
-                roi_features['A_GLSZM'] = np.zeros(14)
+                    print(f"Warning: Error computing C Correlogram features: {e}")
+                roi_features['C_Correlogram'] = np.zeros(expected_dimensions['C_Correlogram'], dtype=float)
         
-        # ---------- B. Morphological Features ---------- ? 
+        # ---------- D. Multi-scale Features ---------- 
+        if include_multiscale:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                try:
+                    # Discrete Wavelet Transform
+                    dwt_features = np.array(pyfeats.dwt_features(roi_intensity, roi_mask, wavelet='bior3.3', levels=3), dtype=float)
+                    
+                    # Ensure correct dimension
+                    if len(dwt_features) != expected_dimensions['D_DWT']:
+                        if verbose_warning:
+                            print(f"Warning: DWT features dimension mismatch. Expected {expected_dimensions['D_DWT']}, got {len(dwt_features)}")
+                        dwt_features = np.zeros(expected_dimensions['D_DWT'], dtype=float)
+                    
+                    roi_features['D_DWT'] = dwt_features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_DWT features: {e}")
+                    roi_features['D_DWT'] = np.zeros(expected_dimensions['D_DWT'], dtype=float)
+
+                try:
+                    # Stationary Wavelet Transform
+                    swt_features = np.array(pyfeats.swt_features(roi_intensity, roi_mask, wavelet='bior3.3', levels=3), dtype=float)
+                    
+                    # Ensure correct dimension
+                    if len(swt_features) != expected_dimensions['D_SWT']:
+                        if verbose_warning:
+                            print(f"Warning: SWT features dimension mismatch. Expected {expected_dimensions['D_SWT']}, got {len(swt_features)}")
+                        swt_features = np.zeros(expected_dimensions['D_SWT'], dtype=float)
+                    
+                    roi_features['D_SWT'] = swt_features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_SWT features: {e}")
+                    roi_features['D_SWT'] = np.zeros(expected_dimensions['D_SWT'], dtype=float)
+
+                try:
+                    # Wavelet Packet
+                    wp_features = np.array(pyfeats.wp_features(roi_intensity, roi_mask, wavelet='coif1', maxlevel=3), dtype=float)
+                    
+                    # Ensure correct dimension
+                    if len(wp_features) != expected_dimensions['D_WP']:
+                        if verbose_warning:
+                            print(f"Warning: WP features dimension mismatch. Expected {expected_dimensions['D_WP']}, got {len(wp_features)}")
+                        wp_features = np.zeros(expected_dimensions['D_WP'], dtype=float)
+                    
+                    roi_features['D_WP'] = wp_features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_WP features: {e}")
+                    roi_features['D_WP'] = np.zeros(expected_dimensions['D_WP'], dtype=float)
+                
+                try:
+                    # Gabor Transform
+                    gt_features = np.array(pyfeats.gt_features(roi_intensity, roi_mask), dtype=float)
+                    
+                    # Ensure correct dimension
+                    if len(gt_features) != expected_dimensions['D_GT']:
+                        if verbose_warning:
+                            print(f"Warning: GT features dimension mismatch. Expected {expected_dimensions['D_GT']}, got {len(gt_features)}")
+                        gt_features = np.zeros(expected_dimensions['D_GT'], dtype=float)
+                    roi_features['D_GT'] = gt_features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_GT features: {e}")
+                    roi_features['D_GT'] = np.zeros(expected_dimensions['D_GT'], dtype=float)
+
+                try:
+                    # Amplitude-Modulation Frequency-Modulation
+                    amfm_features = np.array(pyfeats.amfm_features(roi_intensity), dtype=float)
+                    
+                    # Ensure correct dimension
+                    if len(amfm_features) != expected_dimensions['D_AMFM']:
+                        if verbose_warning:
+                            print(f"Warning: AMFM features dimension mismatch. Expected {expected_dimensions['D_AMFM']}, got {len(amfm_features)}")
+                        amfm_features = np.zeros(expected_dimensions['D_AMFM'], dtype=float)
+                    
+                    roi_features['D_AMFM'] = amfm_features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_AMFM features: {e}")
+                    roi_features['D_AMFM'] = np.zeros(expected_dimensions['D_AMFM'], dtype=float)
+
+        # ---------- E. Other Features ----------
+        if include_other:
+            try:
+                # HOG Features
+                hog_features = pyfeats.hog_features(roi_intensity, ppc=8, cpb=3)
+                # Ensure the result is a numeric array
+                hog_features = np.array(hog_features, dtype=np.float64)
+                
+                # Ensure correct dimension
+                if len(hog_features) != expected_dimensions['E_HOG']:
+                    if verbose_warning:
+                        print(f"Warning: HOG features dimension mismatch. Expected {expected_dimensions['E_HOG']}, got {len(hog_features)}")
+                    hog_features = np.zeros(expected_dimensions['E_HOG'], dtype=np.float64)
+                
+                roi_features['E_HOG'] = hog_features
+            except Exception as e:
+                if verbose_warning:
+                    print(f"Warning: Error computing HOG features: {e}")
+                roi_features['E_HOG'] = np.zeros(expected_dimensions['E_HOG'], dtype=np.float64)
+
+            try:
+                # Hu Moments
+                hu_moments = pyfeats.hu_moments(roi_intensity)
+                # Ensure the result is a numeric array
+                hu_moments = np.array(hu_moments, dtype=np.float64)
+                
+                # Ensure correct dimension
+                if len(hu_moments) != expected_dimensions['E_HuMoments']:
+                    if verbose_warning:
+                        print(f"Warning: HuMoments features dimension mismatch. Expected {expected_dimensions['E_HuMoments']}, got {len(hu_moments)}")
+                    hu_moments = np.zeros(expected_dimensions['E_HuMoments'], dtype=np.float64)
+                
+                roi_features['E_HuMoments'] = hu_moments
+            except Exception as e:
+                if verbose_warning:
+                    print(f"Warning: Error computing HU features: {e}")
+                roi_features['E_HuMoments'] = np.zeros(expected_dimensions['E_HuMoments'], dtype=np.float64)
+
+            try:
+                # Threshold Adjacency Statistics
+                tas_features = pyfeats.tas_features(roi_intensity)
+                # Ensure the result is a numeric array
+                tas_features = np.array(tas_features, dtype=np.float64)
+                
+                # Ensure correct dimension
+                if len(tas_features) != expected_dimensions['E_TAS']:
+                    if verbose_warning:
+                        print(f"Warning: TAS features dimension mismatch. Expected {expected_dimensions['E_TAS']}, got {len(tas_features)}")
+                    tas_features = np.zeros(expected_dimensions['E_TAS'], dtype=np.float64)
+                
+                roi_features['E_TAS'] = tas_features
+            except Exception as e:
+                if verbose_warning:
+                    print(f"Warning: Error computing TAS features: {e}")
+                roi_features['E_TAS'] = np.zeros(expected_dimensions['E_TAS'], dtype=np.float64)
+
+            try:
+                # Zernike Moments
+                # Determine appropriate radius based on ROI size
+                min_dim = min(roi_intensity.shape)
+                radius = min(9, min_dim // 2)  # Use smaller of 9 or half the minimum dimension
+                zernike_moments = pyfeats.zernikes_moments(roi_intensity, radius=radius)
+                # Ensure the result is a numeric array
+                zernike_moments = np.array(zernike_moments, dtype=np.float64)
+                
+                # Ensure correct dimension
+                if len(zernike_moments) != expected_dimensions['E_ZernikesMoments']:
+                    if verbose_warning:
+                        print(f"Warning: ZernikesMoments features dimension mismatch. Expected {expected_dimensions['E_ZernikesMoments']}, got {len(zernike_moments)}")
+                    zernike_moments = np.zeros(expected_dimensions['E_ZernikesMoments'], dtype=np.float64)
+                
+                roi_features['E_ZernikesMoments'] = zernike_moments
+            except Exception as e:
+                if verbose_warning:
+                    print(f"Warning: Error computing Zernike features: {e}")
+                roi_features['E_ZernikesMoments'] = np.zeros(expected_dimensions['E_ZernikesMoments'], dtype=np.float64)
+        
+        # Add this component's features to the list
+        component_features.append(roi_features)
+            
+    # ---------- Aggregate component features ----------
+    # For each feature type, compute mean, std, min, max across all components
+    if component_features:
+        # Verify that all components have the same keys
+        if len(component_features) > 1:
+            first_keys = set(component_features[0].keys())
+            for idx, comp in enumerate(component_features[1:], start=1):
+                if set(comp.keys()) != first_keys:
+                    if verbose_warning:
+                        print(f"Warning: Component {idx} has different keys than the first component")
+                    # Ensure all components have the same keys
+                    for key in first_keys:
+                        if key not in comp:
+                            comp[key] = np.zeros(expected_dimensions.get(key, 1))
+        
+        # List all feature keys from the first component
+        feature_keys = component_features[0].keys()
+        
+        for key in feature_keys:
+            try:
+                # First check if arrays have consistent shapes
+                shapes = [comp[key].shape for comp in component_features]
+                consistent = all(s == shapes[0] for s in shapes)
+                
+                if not consistent:
+                    if verbose_warning:
+                        print(f"Warning: Inconsistent shapes for {key}: {shapes}")
+                    # Fix inconsistent shapes by using zeros with expected dimension
+                    for i, comp in enumerate(component_features):
+                        if key in expected_dimensions and comp[key].shape != (expected_dimensions[key],):
+                            comp[key] = np.zeros(expected_dimensions[key])
+                
+                # Stack this feature from all components (with shape check)
+                feature_arrays = []
+                for comp in component_features:
+                    if key in comp and comp[key] is not None and len(comp[key]) > 0:
+                        # Make sure the array is proper shape (1D)
+                        if comp[key].ndim > 1:
+                            comp[key] = comp[key].flatten()
+                        feature_arrays.append(comp[key])
+                
+                if feature_arrays:
+                    stacked_feature = np.vstack(feature_arrays)
+                    
+                    if stacked_feature.size > 0:
+                        # Compute statistics
+                        mean_feature = np.mean(stacked_feature, axis=0)
+                        std_feature = np.std(stacked_feature, axis=0)
+                        min_feature = np.min(stacked_feature, axis=0)
+                        max_feature = np.max(stacked_feature, axis=0)
+                        
+                        # Append to feature vector
+                        feat_vector.extend(mean_feature)
+                        feat_vector.extend(std_feature)
+                        # Only include min/max for key features to control vector length
+                        if key.startswith(('A_FOS', 'A_GLCM', 'A_NGTDM', 'E_HuMoments')):
+                            feat_vector.extend(min_feature)
+                            feat_vector.extend(max_feature)
+            except Exception as e:
+                if verbose_warning:
+                    print(f"Warning: Error processing feature {key}: {e}")
+                # Add zeros as placeholders for this feature
+                dim = expected_dimensions.get(key, 1)
+                feat_vector.extend(np.zeros(dim * 2))  # For mean and std
+                if key.startswith(('A_FOS', 'A_GLCM', 'A_NGTDM', 'E_HuMoments')):
+                    feat_vector.extend(np.zeros(dim * 2))  # For min and max
+    
+    # Add spatial distribution features
+    try:
+        # Compute centroid positions and Ripley's K function
+        centroid_positions = np.array([prop.centroid for prop in component_props])
+        if len(centroid_positions) > 1:
+            # Compute nearest neighbor distances
+            dist_matrix = distance_matrix(centroid_positions, centroid_positions)
+            np.fill_diagonal(dist_matrix, np.inf)  # Ignore self-distances
+            nearest_neighbor_dists = np.min(dist_matrix, axis=1)
+            
+            # Calculate statistics of distances
+            mean_nn_dist = np.mean(nearest_neighbor_dists)
+            std_nn_dist = np.std(nearest_neighbor_dists)
+            min_nn_dist = np.min(nearest_neighbor_dists)
+            max_nn_dist = np.max(nearest_neighbor_dists)
+            
+            # Add to feature vector
+            feat_vector.extend([mean_nn_dist, std_nn_dist, min_nn_dist, max_nn_dist])
+            
+            # Try to compute Ripley's K if pointpats is available
+            try:
+                max_dist = np.max(nearest_neighbor_dists) * 2
+                radii = np.linspace(0, max_dist, 5)
+                ripley_k_values = []
+                
+                for r in radii:
+                    if r > 0:
+                        count = np.sum(dist_matrix < r, axis=1)
+                        k_r = np.mean(count) / (len(centroid_positions) - 1)
+                        ripley_k_values.append(k_r)
+                
+                feat_vector.extend(ripley_k_values)
+            except Exception as e:
+                if verbose_warning:
+                    print(f"Warning: Error computing Ripley's K: {e}")
+                feat_vector.extend(np.zeros(5))  # Placeholder for Ripley's K
+        else:
+            # Add zeros for spatial features if too few components
+            feat_vector.extend(np.zeros(9))  # 4 for NN distances, 5 for Ripley's K
+    except Exception as e:
+        if verbose_warning:
+            print(f"Warning: Error computing spatial distribution features: {e}")
+        feat_vector.extend(np.zeros(9))  # Placeholder for spatial features
+    
+    # Convert feat_vector to numpy array and check for NaNs or infinities
+    feat_vector = np.array(feat_vector, dtype=np.float64)
+    feat_vector = np.nan_to_num(feat_vector, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    # Return the final feature vector as a numpy array
+    return feat_vector
+
+
+
+def create_feature_vector2(image, component_props, intensity=None, n_bins=20,
+                         include_texture=True, include_morphological=True,
+                         include_histogram=True, include_multiscale=True,
+                         include_other=True, verbose_warning=False):
+    """
+    Create a comprehensive feature vector from a preprocessed image.
+    
+    The feature vector includes:
+      - Texture features (FOS, GLCM, GLDS, NGTDM, SFM, LTE, FDTA, GLRLM, FPS, Shape, HOS, LBP, GLSZM)
+      - Morphological features (Grayscale, Binary)
+      - Histogram-based features (Histogram, MultiregionHistogram, Correlogram)
+      - Multi-scale features (DWT, SWT, WP, GT, AMFM)
+      - Other features (HOG, Hu Moments, TAS, Zernikes Moments)
+    
+    Parameters
+    ----------
+    image : ndarray
+        Preprocessed intensity image.
+    component_props : list
+        List of region properties (from skimage.measure.regionprops).
+    intensity : ndarray, optional
+        Intensity image, if different from the image used for segmentation.
+    n_bins : int, default=20
+        Number of bins for histograms.
+    include_texture : bool, default=True
+        Whether to include texture features.
+    include_morphological : bool, default=True
+        Whether to include morphological features.
+    include_histogram : bool, default=True
+        Whether to include histogram-based features.
+    include_multiscale : bool, default=True
+        Whether to include multi-scale features.
+    include_other : bool, default=True
+        Whether to include other features (HOG, Hu Moments, etc.).
+        
+    Returns
+    -------
+    ndarray
+        Comprehensive feature vector.
+    """
+    # Initialize empty feature vector
+    feat_vector = []
+
+    if not component_props:
+        print("Warning: No components found in image.")
+        # Return an empty feature vector
+        return np.array([0])
+    
+    # Always include number of detected components
+    num_components = len(component_props)
+    feat_vector = [num_components]
+    
+    # Get intensity image if not provided
+    if intensity is None:
+        intensity = image
+    
+    # For component-based processing, we'll compute features for each component
+    # and then aggregate them (mean, std, etc.)
+    component_features = []
+    
+    for prop in component_props:
+        # Extract ROI using bounding box from regionprops
+        minr, minc, maxr, maxc = prop.bbox
+        roi_mask = prop.image  # binary mask of the region
+        roi_intensity = image[minr:maxr, minc:maxc]  # intensity values
+        
+        # Create dictionary to store features for this component
+        roi_features = {}
+        
+        # ---------- A. Texture Features ----------
+        if include_texture:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # Ignore tous les warnings à l'intérieur du bloc
+                try:
+                    # First Order Statistics
+                    features, name = pyfeats.fos(roi_intensity, roi_mask)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_FOS'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing FOS features: {e}")
+                    roi_features['A_FOS'] = np.zeros(16)
+                    
+                try:    
+                    # Gray Level Co-occurrence Matrix
+                    features, name = pyfeats.glcm_features(roi_intensity, ignore_zeros=True)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_GLCM'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing GLCM features: {e}")
+                    roi_features['A_GLCM'] = np.zeros(13)
+                    
+                try:     
+                    # Gray Level Difference Statistics
+                    features, name = pyfeats.glds_features(roi_intensity, roi_mask, 
+                                                                Dx=[0,1,1,1], Dy=[1,1,0,-1])
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_GLDS'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing GLDS features: {e}")
+                    roi_features['A_GLDS'] = np.zeros(5)
+                    
+                try:     
+                    # Neighborhood Gray Tone Difference Matrix
+                    features, name = pyfeats.ngtdm_features(roi_intensity, roi_mask, d=1)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_NGTDM'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing NGTDM features: {e}")
+                    roi_features['A_NGTDM'] = np.zeros(5)
+                    
+                try:     
+                    # Statistical Feature Matrix
+                    features, name = pyfeats.sfm_features(roi_intensity, roi_mask, Lr=4, Lc=4)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_SFM'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing SFM features: {e}")
+                    roi_features['A_SFM'] = np.zeros(4)
+                    
+                try:     
+                    # Laws Texture Energy
+                    features, name = pyfeats.lte_measures(roi_intensity, roi_mask, l=7)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_LTE'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing LTE features: {e}")
+                    roi_features['A_LTE'] = np.zeros(6)
+                    
+                try:     
+                    # Fractal Dimension Texture Analysis
+                    features, name = pyfeats.fdta(roi_intensity, roi_mask, s=3)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_FDTA'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing FDTA features: {e}")
+                    roi_features['A_FDTA'] = np.zeros(4)
+                    
+                try:     
+                    # Gray Level Run Length Matrix
+                    features, name = pyfeats.glrlm_features(roi_intensity, roi_mask, Ng=256)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_GLRLM'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing GLRLM features: {e}")
+                    roi_features['A_GLRLM'] = np.zeros(11)
+                    
+                try:     
+                    # Fourier Power Spectrum
+                    features, name = pyfeats.fps(roi_intensity, roi_mask)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_FPS'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing FPS features: {e}")
+                    roi_features['A_FPS'] = np.zeros(2)
+                    
+                try:     
+                    # Shape Parameters
+                    # Calculate perimeter first
+                    perimeter = prop.perimeter
+                    features, name = pyfeats.shape_parameters(
+                        roi_intensity, roi_mask, perimeter, pixels_per_mm2=1)
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_Shape_Parameters'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing shape parameters features: {e}")
+                    roi_features['A_Shape_Parameters'] = np.zeros(5)
+                    
+                try:     
+                    # Higher Order Spectra
+                    # Using adaptive thresholds based on intensity range
+                    intensity_min = np.min(roi_intensity)
+                    intensity_max = np.max(roi_intensity)
+                    th_low = intensity_min + 0.4 * (intensity_max - intensity_min)
+                    th_high = intensity_min + 0.6 * (intensity_max - intensity_min)
+                    features, name = pyfeats.hos_features(roi_intensity, th=[th_low, th_high])
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_HOS'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing HOS features: {e}")
+                    roi_features['A_HOS'] = np.zeros(2)
+                    
+                try:     
+                    # Local Binary Patterns
+                    roi_int_uint8 = (roi_intensity * 255 / roi_intensity.max()).astype(np.uint8)
+                    features, name = pyfeats.lbp_features(roi_int_uint8, roi_int_uint8, 
+                                                                P=[8,16,24], R=[1,2,3]) 
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_LBP'] = features
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing LPB features: {e}")
+                    roi_features['A_LBP'] = np.zeros(6)
+                    
+                try:     
+                    # Gray Level Size Zone Matrix
+                    features, name = pyfeats.glszm_features(roi_intensity, roi_mask) 
+                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    roi_features['A_GLSZM'] = features  
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing GLSZM features: {e}")
+                    roi_features['A_GLSZM'] = np.zeros(14)
+            
+        # ---------- B. Morphological Features ---------- 
         if include_morphological:
             try:
                 # Grayscale Morphology
@@ -482,140 +1239,155 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
                     print(f"Warning: Error computing morphological grayscale features: {e}")
                 roi_features['B_Morphological_Grayscale_pdf'] = np.zeros(30)
                 roi_features['B_Morphological_Grayscale_cdf'] = np.zeros(30)
-                
-            try:    
-                # Multi-level Binary Morphology
-                # Adaptive thresholds based on intensity range
-                intensity_min = np.min(roi_intensity)
-                intensity_max = np.max(roi_intensity)
-                th_low = intensity_min + 0.25 * (intensity_max - intensity_min)
-                th_high = intensity_min + 0.5 * (intensity_max - intensity_min)
-                
-                roi_features['B_Morphological_Binary_L_pdf'], roi_features['B_Morphological_Binary_M_pdf'], \
-                roi_features['B_Morphological_Binary_H_pdf'], roi_features['B_Morphological_Binary_L_cdf'], \
-                roi_features['B_Morphological_Binary_M_cdf'], roi_features['B_Morphological_Binary_H_cdf'] = \
-                    pyfeats.multilevel_binary_morphology_features(
-                        roi_intensity, roi_mask, N=30, thresholds=[th_low, th_high])
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing morphological Binary features: {e}")
-                roi_features['B_Morphological_Binary_L_pdf'] = np.zeros(30)
-                roi_features['B_Morphological_Binary_M_pdf'] = np.zeros(30)
-                roi_features['B_Morphological_Binary_H_pdf'] = np.zeros(30)
-                roi_features['B_Morphological_Binary_L_cdf'] = np.zeros(30)
-                roi_features['B_Morphological_Binary_M_cdf'] = np.zeros(30)
-                roi_features['B_Morphological_Binary_H_cdf'] = np.zeros(30)
-        
-        # ---------- C. Histogram-based Features ---------- ERRORS
+
+            # Désactiver temporairement les RuntimeWarnings ici
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                try:    
+                    # Multi-level Binary Morphology
+                    intensity_min = np.min(roi_intensity)
+                    intensity_max = np.max(roi_intensity)
+                    th_low = intensity_min + 0.25 * (intensity_max - intensity_min)
+                    th_high = intensity_min + 0.5 * (intensity_max - intensity_min)
+
+                    roi_features['B_Morphological_Binary_L_pdf'], roi_features['B_Morphological_Binary_M_pdf'], \
+                    roi_features['B_Morphological_Binary_H_pdf'], roi_features['B_Morphological_Binary_L_cdf'], \
+                    roi_features['B_Morphological_Binary_M_cdf'], roi_features['B_Morphological_Binary_H_cdf'] = \
+                        pyfeats.multilevel_binary_morphology_features(
+                            roi_intensity, roi_mask, N=30, thresholds=[th_low, th_high])
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing morphological Binary features: {e}")
+                    roi_features['B_Morphological_Binary_L_pdf'] = np.zeros(30)
+                    roi_features['B_Morphological_Binary_M_pdf'] = np.zeros(30)
+                    roi_features['B_Morphological_Binary_H_pdf'] = np.zeros(30)
+                    roi_features['B_Morphological_Binary_L_cdf'] = np.zeros(30)
+                    roi_features['B_Morphological_Binary_M_cdf'] = np.zeros(30)
+                    roi_features['B_Morphological_Binary_H_cdf'] = np.zeros(30)
+                    
+        # ---------- C. Histogram-based Features ---------- 
         if include_histogram:
             try:
-                # Basic Histogram
-                roi_features['C_Histogram'] = pyfeats.histogram(roi_intensity, roi_mask, bins=32)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    roi_features['C_Histogram'] = pyfeats.histogram(roi_intensity, roi_mask, bins=32)
+                roi_features['C_Histogram'] = roi_features['C_Histogram'].astype(float)
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error computing C histogram features: {e}")
-                roi_features['C_Histogram'] = np.zeros(32)
-                
+                roi_features['C_Histogram'] = np.zeros(32, dtype=float)
+                        
             try:    
-                # Multi-region Histogram
-                roi_features['C_MultiregionHistogram'] = pyfeats.multiregion_histogram(
-                    roi_intensity, roi_mask, bins=32, num_eros=3, square_size=3)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    roi_features['C_MultiregionHistogram'] = pyfeats.multiregion_histogram(
+                        roi_intensity, roi_mask, bins=32, num_eros=3, square_size=3)
+                roi_features['C_MultiregionHistogram'] = roi_features['C_MultiregionHistogram'].astype(float)
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error computing C MultiregionHistogram features: {e}")
-                roi_features['C_MultiregionHistogram'] = np.zeros(32 * 4)  # Original + 3 erosions
-            
+                roi_features['C_MultiregionHistogram'] = np.zeros(32 * 4, dtype=float)
+                
             try:    
-                # Correlogram
-                roi_features['C_Correlogram'] = pyfeats.correlogram(
-                    roi_intensity, roi_mask, bins_digitize=32, bins_hist=32, flatten=True) 
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    roi_features['C_Correlogram'] = pyfeats.correlogram(
+                        roi_intensity, roi_mask, bins_digitize=32, bins_hist=32, flatten=True) 
+                roi_features['C_Correlogram'] = roi_features['C_Correlogram'].astype(float)
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error computing C Correlogram features: {e}")
-                roi_features['C_Correlogram'] = np.zeros(32 * 32)  # flattened correlogram
+                roi_features['C_Correlogram'] = np.zeros(32 * 32, dtype=float)
         
-        # ---------- D. Multi-scale Features ---------- ERRORS
+        # ---------- D. Multi-scale Features ---------- 
         if include_multiscale:
-            try:
-                # Discrete Wavelet Transform
-                roi_features['D_DWT'] = pyfeats.dwt_features(
-                    roi_intensity, roi_mask, wavelet='bior3.3', levels=3)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing multi-scale D_DWT features: {e}")
-                roi_features['D_DWT'] = np.zeros(7 * 3 * 4)  # 7 stats, 3 levels, 4 subbands
-                
-            try:    
-                # Stationary Wavelet Transform
-                roi_features['D_SWT'] = pyfeats.swt_features(
-                    roi_intensity, roi_mask, wavelet='bior3.3', levels=3)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing multi-scale D_SWT features: {e}")
-                roi_features['D_SWT'] = np.zeros(7 * 3 * 4)  # 7 stats, 3 levels, 4 subbands
-                
-            try:    
-                # Wavelet Packet
-                roi_features['D_WP'] = pyfeats.wp_features(
-                    roi_intensity, roi_mask, wavelet='coif1', maxlevel=3)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing multi-scale D_WP features: {e}")
-                roi_features['D_WP'] = np.zeros(7 * (4**3))  # 7 stats, 4^3 nodes at level 3
-                
-            try:    
-                # Gabor Transform
-                roi_features['D_GT'] = pyfeats.gt_features(roi_intensity, roi_mask)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing multi-scale D_GT features: {e}")
-                roi_features['D_GT'] = np.zeros(7 * 4 * 6)  # 7 stats, 4 scales, 6 orientations
-            
-            try:    
-                # Amplitude-Modulation Frequency-Modulation
-                roi_features['D_AMFM'] = pyfeats.amfm_features(roi_intensity)  
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing multi-scale D_AMFM features: {e}")
-                roi_features['D_AMFM'] = np.zeros(12)  # AMFM feature dimension
-        
-        # ---------- E. Other Features ---------- ERRORS
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                try:
+                    # Discrete Wavelet Transform
+                    roi_features['D_DWT'] = np.array(pyfeats.dwt_features(roi_intensity, roi_mask, wavelet='bior3.3', levels=3),dtype=float)
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_DWT features: {e}")
+                    roi_features['D_DWT'] = np.zeros(7 * 3 * 4, dtype=float)  # 7 stats, 3 levels, 4 subbands
+
+                try:
+                    # Stationary Wavelet Transform
+                    roi_features['D_SWT'] = np.array(pyfeats.swt_features(roi_intensity, roi_mask, wavelet='bior3.3', levels=3), dtype=float)
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_SWT features: {e}")
+                    roi_features['D_SWT'] = np.zeros(7 * 3 * 4, dtype=float)
+
+                try:
+                    # Wavelet Packet
+                    roi_features['D_WP'] = np.array(pyfeats.wp_features(roi_intensity, roi_mask, wavelet='coif1', maxlevel=3),dtype=float)
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_WP features: {e}")
+                    roi_features['D_WP'] = np.zeros(7 * (4**3), dtype=float)  # 4^3 = 64
+
+                try:
+                    # Gabor Transform
+                    roi_features['D_GT'] = np.array(pyfeats.gt_features(roi_intensity, roi_mask),dtype=float)
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_GT features: {e}")
+                    roi_features['D_GT'] = np.zeros(7 * 4 * 6, dtype=float)  # 7 stats, 4 scales, 6 orientations
+
+                try:
+                    # Amplitude-Modulation Frequency-Modulation
+                    roi_features['D_AMFM'] = np.array(pyfeats.amfm_features(roi_intensity),dtype=float)
+                except Exception as e:
+                    if verbose_warning:
+                        print(f"Warning: Error computing multi-scale D_AMFM features: {e}")
+                    roi_features['D_AMFM'] = np.zeros(12, dtype=float)  # AMFM feature dimension
+
+        # ---------- E. Other Features ----------
         if include_other:
             try:
                 # HOG Features
                 roi_features['E_HOG'] = pyfeats.hog_features(roi_intensity, ppc=8, cpb=3)
+                # Ensure the result is a numeric array (in case it's returned as something unexpected)
+                roi_features['E_HOG'] = np.array(roi_features['E_HOG'], dtype=np.float64)
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error computing HOG features: {e}")
-                roi_features['E_HOG'] = np.zeros(36)  # HOG feature dimension
-                
-            try:    
+                roi_features['E_HOG'] = np.zeros(36, dtype=np.float64)  # HOG feature dimension
+
+            try:
                 # Hu Moments
                 roi_features['E_HuMoments'] = pyfeats.hu_moments(roi_intensity)
+                # Ensure the result is a numeric array
+                roi_features['E_HuMoments'] = np.array(roi_features['E_HuMoments'], dtype=np.float64)
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error computing HU features: {e}")
-                roi_features['E_HuMoments'] = np.zeros(7)  # 7 Hu moments
-                  
-            try:  
+                roi_features['E_HuMoments'] = np.zeros(7, dtype=np.float64)  # 7 Hu moments
+
+            try:
                 # Threshold Adjacency Statistics
                 roi_features['E_TAS'] = pyfeats.tas_features(roi_intensity)
+                # Ensure the result is a numeric array
+                roi_features['E_TAS'] = np.array(roi_features['E_TAS'], dtype=np.float64)
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error computing TAS features: {e}")
-                roi_features['E_TAS'] = np.zeros(9)  # TAS feature dimension
-                
-            try:   
+                roi_features['E_TAS'] = np.zeros(9, dtype=np.float64)  # TAS feature dimension
+
+            try:
                 # Zernike Moments
                 # Determine appropriate radius based on ROI size
                 min_dim = min(roi_intensity.shape)
                 radius = min(9, min_dim // 2)  # Use smaller of 9 or half the minimum dimension
                 roi_features['E_ZernikesMoments'] = pyfeats.zernikes_moments(
                     roi_intensity, radius=radius)
+                # Ensure the result is a numeric array
+                roi_features['E_ZernikesMoments'] = np.array(roi_features['E_ZernikesMoments'], dtype=np.float64)
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error computing Zernike features: {e}")
-                roi_features['E_ZernikesMoments'] = np.zeros(25)  # Zernike moments up to order 9
+                roi_features['E_ZernikesMoments'] = np.zeros(25, dtype=np.float64)  # Zernike moments up to order 9
         
         """print("---------- Extracted features for component -----------")
         # print dictionnary roi_features in a nice format
@@ -1019,9 +1791,9 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
         
             component, label_seg = get_regions_of_interest(maxima, image_original, mask)
             feat = create_feature_vector(image, component, intensity[im_num], n_bins, 
-                                         include_texture=True, include_morphological=False,
-                                         include_histogram=False, include_multiscale=False,
-                                         include_other=False)
+                                         include_texture=True, include_morphological=True,
+                                         include_histogram=True, include_multiscale=True,
+                                         include_other=True)
             
             
             features['label'].append(y[im_num])
