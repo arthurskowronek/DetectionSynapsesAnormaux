@@ -11,6 +11,7 @@ import matplotlib.colors as mcolors
 import networkx as nx
 from scipy.spatial.distance import cdist
 from skimage.draw import line
+import itertools
 
 # Constants
 DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -471,8 +472,193 @@ def worm_segmentation(img):
     
     return worm_mask
 
-def find_endpoints(G):
-    return [n for n in G.nodes if G.degree[n] == 1]
+def find_endpoints(skel, G, maxima_coords, skeletonize, angle_threshold_degrees=90):
+    endpoints = [n for n in G.nodes if G.degree[n] == 1]
+    angle_junctions = []
+
+    for node in G.nodes:
+        neighbors = list(G.neighbors(node))
+        
+        if len(neighbors) >= 2:
+            coords = []
+            if skeletonize:
+                coords = [np.array(neighbor) for neighbor in neighbors]
+                node_coords = np.array(node)
+            else:
+                coords = [np.array(maxima_coords[n]) for n in neighbors]
+                node_coords = np.array(maxima_coords[node])
+
+            all_angles_sharp = True
+
+            for a, b in itertools.combinations(coords, 2):
+                v1 = a - node_coords
+                v2 = b - node_coords
+
+                norm1 = np.linalg.norm(v1)
+                norm2 = np.linalg.norm(v2)
+                if norm1 == 0 or norm2 == 0:
+                    continue
+
+                cosine_angle = np.clip(np.dot(v1, v2) / (norm1 * norm2), -1.0, 1.0)
+                angle_rad = np.arccos(cosine_angle)
+                angle_deg = np.degrees(angle_rad)
+
+                if angle_deg >= angle_threshold_degrees:
+                    all_angles_sharp = False
+                    break  # One wide angle is enough to skip the node
+
+            if all_angles_sharp:
+                angle_junctions.append(node if skeletonize else maxima_coords[node])
+
+    return endpoints, angle_junctions
+
+def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1):
+    if skeletonize:
+        G = skeleton_to_graph(skel)
+
+    endpoints, angle_junctions = find_endpoints(skel, G, maxima_coords, skeletonize, angle_threshold_degrees=90)
+
+    if not skeletonize:
+        endpoints = [maxima_coords[i] for i in endpoints]
+    else:
+        angle_junctions = [maxima_coords[i] for i in angle_junctions]
+
+    # Plotting the skeleton with endpoints and junctions
+    plt.figure(figsize=(8, 8))
+    plt.imshow(skel, cmap='gray')
+    for y, x in endpoints:
+        plt.scatter(x, y, color='red', s=10)
+    for y, x in angle_junctions:
+        plt.scatter(x, y, color='blue', s=10)
+    plt.title("Endpoints and Junctions") 
+    plt.show()
+
+    # Initiate variables for pathfinding
+    all_paths = {}
+    endpoint_indices = list(range(len(endpoints)))
+    angle_junction_set = set(map(tuple, angle_junctions))
+    
+    # Iterate over all pairs of endpoints to find all possible paths
+    for i in endpoint_indices:
+        for j in endpoint_indices[i + 1:]:
+            try:
+                s_idx, e_idx = (endpoints[i], endpoints[j]) if skeletonize else (
+                    np.where((maxima_coords == endpoints[i]).all(axis=1))[0][0],
+                    np.where((maxima_coords == endpoints[j]).all(axis=1))[0][0]
+                )
+                path = nx.shortest_path(G, s_idx, e_idx)
+
+                if skeletonize:
+                    maxima_set = set(map(tuple, maxima_coords))
+                    maxima_count = sum(node in maxima_set for node in path)
+                else:
+                    maxima_count = sum(1 for node in path if node < len(maxima_coords))
+                key = f"path_{s_idx}_{e_idx}"
+                
+                if skeletonize:
+                    # if the path does not contain angle junctions, we keep it
+                    if not any(tuple(node) in angle_junction_set for node in path):
+                        all_paths[key] = {
+                            "path": path,
+                            "maxima_count": maxima_count,
+                            "length": len(path)
+                        }
+                    else: # Divide the path into subpath around the angle junctions
+                        list_of_nodes = list(path)
+                        # get indices of start, end, and junctions in list_of_nodes
+                        indices = [list_of_nodes.index(node) for node in path if tuple(node) in angle_junction_set]
+                        indices.append(len(list_of_nodes)-1) # add the last index
+                        indices = [0] + indices # add the first index
+                        indices = sorted(indices) # sort the indices
+                        
+                        for start, end in zip(indices[:-1], indices[1:]):
+                            subpath = list_of_nodes[start:end+1]
+                            subpath_key = f"subpath_{start}_{end}"
+                            subpath_maxima_count = sum(node in maxima_set for node in subpath)
+                            all_paths[subpath_key] = {
+                                "path": subpath,
+                                "maxima_count": subpath_maxima_count,
+                                "length": len(subpath)
+                            }
+                        
+                else:
+                    if not any(tuple(maxima_coords[node]) in angle_junction_set for node in path if node < len(maxima_coords)):
+                        all_paths[key] = {
+                            "path": path,
+                            "maxima_count": maxima_count,
+                            "length": len(path)
+                        }
+                    else:
+                        list_of_nodes = list(path)
+                        # get indices of start, end, and junctions in list_of_nodes
+                        indices = [list_of_nodes.index(node) for node in path if tuple(maxima_coords[node]) in angle_junction_set]
+                        indices.append(len(list_of_nodes)-1) # add the last index
+                        indices = [0] + indices # add the first index
+                        indices = sorted(indices) # sort the indices
+    
+                        
+                        for start, end in zip(indices[:-1], indices[1:]):
+                            subpath = list_of_nodes[start:end+1]
+                            subpath_key = f"subpath_{start}_{end}"
+                            subpath_maxima_count = sum(1 for node in subpath if node < len(maxima_coords))
+                            all_paths[subpath_key] = {
+                                "path": subpath,
+                                "maxima_count": subpath_maxima_count,
+                                "length": len(subpath)
+                            }
+                        
+
+                
+            except nx.NetworkXNoPath:
+                #print(f"No path between {s_idx} and {e_idx}")
+                continue
+
+    # Sorting paths
+    sort_key = "length" if skeletonize else "maxima_count"
+    sorted_paths = sorted(all_paths.values(), key=lambda x: x[sort_key], reverse=True)
+
+    # Print sorted paths with their lengths or maxima counts
+    """for i, data in enumerate(sorted_paths):
+        print(f"Path {i}: {sort_key.capitalize()} = {data[sort_key]}")"""
+
+    selected_paths = []
+    used_nodes = set()
+
+    for path_data in sorted_paths:
+        path = path_data["path"]
+        if keep == 1 and not selected_paths:
+            
+            
+            selected_paths.append(path)
+        elif keep == 2 and not used_nodes.intersection(path):
+            selected_paths.append(path)
+            used_nodes.update(path)
+        if len(selected_paths) == keep:
+            break
+
+
+
+
+    # Convert node indices to coordinates if needed
+    if not skeletonize:
+        selected_paths = [[maxima_coords[pt] for pt in path] for path in selected_paths]
+
+    # Plot selected paths
+    flat_points = [pt for path in selected_paths for pt in path]
+    plt.figure(figsize=(8, 8))
+    plt.imshow(skel, cmap='gray')
+    for path in selected_paths:
+        y, x = zip(*path)
+        plt.plot(x, y, color='red', linewidth=2)
+    plt.title("Selected Paths")
+    plt.show()
+
+    # Create binary image of the main branch
+    main_branch = np.zeros_like(skel, dtype=bool)
+    for y, x in flat_points:
+        main_branch[y, x] = True
+
+    return G, main_branch
 
 def get_longest_path(G):
     endpoints = find_endpoints(G)
@@ -522,90 +708,14 @@ def graph_to_skeleton(G, node_to_coord, shape=None):
         
     return skel
 
-def skeleton_keep_main_branch(skel, maxima_coords, skeletonize = False, keep=1):
-    G = skeleton_to_graph(skel)
-    endpoints = find_endpoints(G)
-    
-    # show endpoints
-    """plt.figure(figsize=(8, 8))
-    plt.imshow(skel, cmap='gray')
-    for y, x in endpoints:
-        plt.scatter(x, y, color='red', s=10)
-    plt.title("Endpoints")
-    plt.show()"""
-
-    all_paths_dict = {}
-
-    for i in range(len(endpoints)):
-        for j in range(i + 1, len(endpoints)):
-            try:
-                path = nx.shortest_path(G, endpoints[i], endpoints[j])
-                
-                # Count how many points in the path are also in maxima_coords
-                maxima_count = 0
-                path_points = set(path)  # Convert to set for faster lookups
-                
-                # If maxima_coords is a numpy array of coordinates like [(y1,x1), (y2,x2), ...]
-                for point in maxima_coords:
-                    if tuple(point) in path_points:
-                        maxima_count += 1
-                
-                # Create a unique key for each path
-                path_key = f"path_{endpoints[i]}_{endpoints[j]}"
-                
-                # Store the path, node count, and maxima count
-                all_paths_dict[path_key] = {
-                    "path": path,
-                    "maxima_count": maxima_count,
-                    "length": len(path)
-                }
-            except nx.NetworkXNoPath:
-                continue
-
-    # Sort paths by node count, descending
-    if skeletonize == False:
-        sorted_paths = sorted(all_paths_dict.items(), key=lambda x: x[1]["maxima_count"], reverse=True)
-    else: # on veut le plus grand squelette, pas celui qui traverse le plus de maxima
-        sorted_paths = sorted(all_paths_dict.items(), key=lambda x: x[1]["length"], reverse=True)
-
-    # Show all paths and print their length
-    """for i, (path_key, path_data) in enumerate(sorted_paths):
-        print(f"Path {i}: Length = {path_data['maxima_count']}")
-        plt.figure(figsize=(8, 8))
-        plt.imshow(skel, cmap='gray')
-        for y, x in path_data["path"]:
-            plt.scatter(x, y, color='red', s=1)
-        plt.title(f"Path {i}")
-        plt.show()"""
-
-    selected_paths = []
-    if keep == 1:
-        if sorted_paths:
-            selected_paths = [sorted_paths[0][1]["path"]]
-    elif keep == 2:
-        for _, path_data in sorted_paths:
-            path = path_data["path"]
-            used_nodes = set(n for p in selected_paths for n in p)
-            if not used_nodes.intersection(path):
-                selected_paths.append(path)
-            if len(selected_paths) == 2:
-                break
-
-    # Create new image
-    main_branch = np.zeros_like(skel, dtype=bool)
-    for path in selected_paths:
-        for y, x in path:
-            main_branch[y, x] = True
-    return G, main_branch
- 
 def get_synapses_graph(worm_mask, maxima_coords):
     
-    NUMBER_OF_SEGMENTS = 15
+    NUMBER_OF_SEGMENTS = 20
     
     # 1. Skeletonize the worm
     skeleton = ski.morphology.skeletonize(worm_mask)
     
-    G, skeleton = skeleton_keep_main_branch(skeleton, maxima_coords, skeletonize = True, keep=1)
+    G, skeleton = skeleton_keep_main_branch(None, skeleton, maxima_coords, skeletonize = True, keep=1)
     
     # plot
     """plt.figure(figsize=(8, 8))
@@ -816,12 +926,12 @@ def get_synapses_graph(worm_mask, maxima_coords):
     
     
     # Decide number of cords based on the number of maxima in each slice
-    if np.sum(np.isin(labels_slice, [0, 1])) > len(maxima_coords) / 4 and np.sum(np.isin(labels_slice, [4, 5])) > len(maxima_coords) / 4:
+    if np.sum(np.isin(labels_slice, [0, 1])) > len(maxima_coords) / 5 and np.sum(np.isin(labels_slice, [4, 5])) > len(maxima_coords) / 5:
         NUMBER_OF_CORDS = 2
     else:
         NUMBER_OF_CORDS = 1
     
-    print("Number of cords:", NUMBER_OF_CORDS)
+    #print("Number of cords:", NUMBER_OF_CORDS)
 
     """# 6. Plot maxima with their assigned slice
     plt.figure(figsize=(8, 8))
@@ -901,7 +1011,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.show()"""
     
     # 10. Keep only the NUMBER_OF_CORDS main branches of the skeleton
-    G, skeleton = skeleton_keep_main_branch(skeleton, maxima_coords, skeletonize = False, keep=NUMBER_OF_CORDS)
+    G, skeleton = skeleton_keep_main_branch(G, skeleton, maxima_coords, skeletonize = False, keep=NUMBER_OF_CORDS)
     
     # 11. Plot the skeleton
     """plt.figure(figsize=(8, 8))
