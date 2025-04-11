@@ -1,42 +1,24 @@
-import numpy as np
-import skimage as ski
-import datetime
+import scipy
 import joblib
-import shutil
-import pandas as pd
 import pyfeats
 import pointpats
+import numpy as np
+import pandas as pd
+import skimage as ski
+from skimage.feature import graycomatrix, graycoprops, hog
+import matplotlib.pyplot as plt
 from pathlib import Path
 from boruta import BorutaPy  
+from scipy.signal import savgol_filter
+from scipy.spatial import distance_matrix
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LassoCV
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
 from feature_engine.selection import MRMR
-
-import matplotlib.pyplot as plt
-
-from scipy import stats
-from scipy.signal import savgol_filter
-from scipy.spatial import distance_matrix
-
-from skimage.feature import graycomatrix, graycoprops, hog
-from skimage.color import label2rgb
-
-import scipy
-
 
 from constants import *
 
-
-# Constants
-N_FEAT = 12
-N_BINS_FEAT = 20
-DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-DEFAULT_PKL_NAME = f'dataset_{DATE}.pkl'
-DATASET_PKL_DIR = Path('./dataset_pkl')
 
 # ---------- Utility functions ----------
 

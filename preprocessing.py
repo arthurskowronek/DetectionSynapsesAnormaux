@@ -1,7 +1,6 @@
 import numpy as np
 import skimage as ski
 import skan
-import datetime
 import joblib
 import shutil
 from pathlib import Path
@@ -13,14 +12,10 @@ from scipy.spatial.distance import cdist
 from skimage.draw import line
 import itertools
 
-# Constants
-DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-DEFAULT_PKL_NAME = f'dataset_{DATE}.pkl'
-DATASET_PKL_DIR = Path('./dataset_pkl')
-# Features
-MIN_AREA_FEATURE = 10
-MAX_LENGTH_OF_FEATURES = 20000
+from constants import *
 
+
+# Utils functions
 def signed_distance_to_segment_2d(seg, p1):
     seg = np.array(seg)  # Convert 'seg' to a NumPy array
     if seg.shape[0] < 2:
@@ -38,6 +33,7 @@ def signed_distance_to_segment_2d(seg, p1):
     distance = np.abs(cross_product) / segment_length
     return distance, np.sign(cross_product)
 
+# Image processing functions
 def remove_small_objects(image, option=1, min_size_value=30):
     if option == 1:
         bool_img = image.astype(bool)
@@ -67,411 +63,7 @@ def close_gap_between_edges(image, max_distance=5):
     closed = ski.morphology.erosion(dilated, selem)
     return closed
 
-def create_mask_synapse(image):
-    
-    image_copy = image.copy()
-    
-    #display_image(image)
-    
-    # ------ MASK 1 ------
-    image = ski.filters.frangi(image_copy,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
-    image = ski.filters.apply_hysteresis_threshold(image, 0.01, 0.2)
-    # Remove small objects
-    image = remove_small_objects(image, option=2, min_size_value=25)
-    # keep only components that are more like a line than a blob
-    labeled_image = ski.measure.label(image)
-    components = ski.measure.regionprops(labeled_image)
-    label_components = np.zeros_like(labeled_image)
-    for component in components:
-        # if components is more like a line than a blob, keep it
-        if component.major_axis_length/component.minor_axis_length > 4:
-            label_components[labeled_image == component.label] = 1
-        else:
-            label_components[labeled_image == component.label] = 0
-    mask1 = label_components
-    
-    
-    # ------ MASK 2 ------
-    """image = ski.filters.frangi(image_copy,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
-    image = ski.filters.apply_hysteresis_threshold(image, 0.02, 0.15)
-    # get skeleton
-    skeleton = ski.morphology.skeletonize(image)
-    # display_image(skeleton)
-    # keep only components of skeleton that are longer than 10 pixels 
-    labeled_image = ski.measure.label(skeleton)
-    components = ski.measure.regionprops(labeled_image)
-    label_components = np.zeros_like(labeled_image)
-    for component in components:
-        if component.major_axis_length > 50:
-            label_components[labeled_image == component.label] = 1
-        else:
-            label_components[labeled_image == component.label] = 0
-    image = label_components  
-    # dilate image
-    selem = ski.morphology.disk(1)
-    mask2 = ski.morphology.dilation(image, selem)"""
-    
-    
-    image = mask1 #| mask2 # combine masks
-    
-    #display_image(image)
-    
-    # ----- ADJUST CONTRAST ----- 
-    #image = anisotropic_diffusion(image) # remove noise and enhance edges
-    #image = exposure.adjust_gamma(image, gamma=3) 
-    #image = exposure.adjust_log(image, gain=2, inv=False) 
-    #image = ski.exposure.equalize_hist(image) # not a good idea
-        
-        
-    # ----- TUBNESS FILTERS -----
-    # Meijering filter
-    #meij_image = ski.filters.meijering(image, sigmas=range(1, 8, 2), black_ridges=False) # quand on baisse le sigma max, on garde seulement les vaisseaux fins
-    # Sato filter
-    #image_sato = ski.filters.sato(image, sigmas=range(1, 3, 1), black_ridges=False)
-    # Hessian filter
-    #image = ski.filters.hessian(image,black_ridges=False,sigmas=range(1, 5, 1), alpha=2, beta=0.5, gamma=15)
-    # Franji filter
-    #image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
-    #image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=15)
-        
-        
-    #display_image(0.9 * image + 0.1 * image_sato)
-    #display_image(image)
-    
-    #image =  0.9 * image + 0.1 * meij_image
-    
-    #display_image(image)
-        
-    # gabors filter
-    #real, imag = ski.filters.gabor(image, frequency=0.5)
-    #image = real 
-        
-    # hysterisis thresholding
-    #image = ski.filters.apply_hysteresis_threshold(image, 0.01, 0.2)
-      
-        
-    # ----- DENOISE -----
-    #image = ski.restoration.denoise_nl_means(image, h=0.7)
-    #image = ski.restoration.denoise_bilateral(image)
-    #image = ski.restoration.denoise_tv_chambolle(image, weight=0.1)
-    #image = ski.restoration.denoise_bilateral(image)
-        
-
-    # ----- REMOVE SMALL OBJECTS -----
-    #image = remove_small_objects(image, option=2, min_size_value=25)
-        
-    
-    # keep only components that are more like a line than a blob
-    """labeled_image = ski.measure.label(image)
-    components = ski.measure.regionprops(labeled_image)
-    label_components = np.zeros_like(labeled_image)
-    for component in components:
-        # if components is more like a line than a blob, keep it
-        if component.major_axis_length/component.minor_axis_length > 4:
-            label_components[labeled_image == component.label] = 1
-        else:
-            label_components[labeled_image == component.label] = 0
-    image = label_components"""
-        
-        
-    """# get skeleton
-    skeleton = ski.morphology.skeletonize(image)
-
-    #display_image(skeleton)
-    
-    # keep only components of skeleton that are longer than 10 pixels
-    labeled_image = ski.measure.label(skeleton)
-    components = ski.measure.regionprops(labeled_image)
-    label_components = np.zeros_like(labeled_image)
-    for component in components:
-        if component.major_axis_length > 50:
-            label_components[labeled_image == component.label] = 1
-        else:
-            label_components[labeled_image == component.label] = 0
-    image = label_components"""
-    
-    #display_image(image)
-        
-    # ----- THRESHOLDING -----
-    # threshold otsu
-    #threshold_value = ski.filters.threshold_otsu(image)
-    # threshold local
-    #threshold_value = ski.filters.threshold_local(image, block_size=3)
-    # threshold mean
-    #threshold_value = ski.filters.threshold_mean(image)
-    # threshold triangle
-    #threshold_value = ski.filters.threshold_triangle(image)
-    # threshold yen
-    #threshold_value = ski.filters.threshold_yen(image)
-    # threshold li
-    #threshold_value = ski.filters.threshold_li(image)
-    #fig, ax = ski.filters.try_all_threshold(image, figsize=(8, 5), verbose=True) 
-    #plt.show()
-    #image = image  > threshold_value
-        
-    # ----- EDGE DETECTION -----
-    # canny edge detector
-    #image = ski.feature.canny(image, sigma=1)
-    # sobel filter - edge detection
-    #image = ski.filters.sobel(image)
-    # prewitt filter - edge detection
-    #image = ski.filters.prewitt(image)
-    # scharr filter
-    #image = ski.filters.scharr(image)
-    # roberts filter
-    #image = ski.filters.roberts(image)
-    # laplace filter
-    #image = ski.filters.laplace(image, ksize=3) # doesn't work
-   
-    
-    # Hough Transform to detect long edges
-    #lines = ski.transform.probabilistic_hough_line(mask_synapses, threshold=10, line_length=5, line_gap=3)
-    #for line in lines:
-        #p0, p1 = line
-        #mask_synapses[p0[0]:p1[0], p0[1]:p1[1]] = 1
-        
-    
-    # dilate image
-    selem = ski.morphology.disk(1)
-    image = ski.morphology.dilation(image, selem)
-
-    
-    # ----- CLOSE GAP BETWEEN EDGES -----
-    #image = close_gap_between_edges(image, max_distance=10)
-    
-    #display_image(image)
-    
-    return image
-     
-def fill_black_pixels(image): # INUTILE ?
-    # for each pixel in the image that is black, we will fill it with the mean of the 5x5 pixels around it
-    for i in range(image.shape[0]):
-        for j in range(image.shape[1]):
-            if image[i,j] == 0:
-                count_number_black_pixels = 0
-                for k in range(-2,3):
-                    for l in range(-2,3):
-                        if i+k >= 0 and i+k < image.shape[0] and j+l >= 0 and j+l < image.shape[1]:
-                            if image[i+k,j+l] == 0:
-                                count_number_black_pixels += 1
-                if count_number_black_pixels == 25:
-                    image[i,j] = 0
-                else:
-                    image[i,j] = np.sum(image[i-2:i+2,j-2:j+2])/(25-count_number_black_pixels)
-    return image    
- 
-def order_skeleton_points_skan(skeleton):
-    # Create the Skeleton object
-    skel_obj = skan.csr.Skeleton(skeleton)
-    
-    # Get the summary with branch information
-    summary = skan.summarize(skel_obj, separator='-')
-    
-    # Create a flat list of all points from all paths
-    all_points = []
-    
-    for i in range(len(summary)):
-        # Get coordinates for each path
-        path_coords = skel_obj.path_coordinates(i)
-        # Add all points from this path to the flat list
-        for coord in path_coords:
-            all_points.append(tuple(coord))
-    
-    return all_points
-
-def get_high_intensity_pixels (mask, image):
-    
-    method = 1
-    # ------------------------ METHOD 1 --------------------------------
-    if method == 1:
-        
-        skeleton = ski.morphology.skeletonize(mask)
-            
-        ordered_skeleton_points = order_skeleton_points_skan(skeleton)
-        intensities = []
-        for x, y in ordered_skeleton_points:
-            intensities.append(image[x, y])
-            
-        # smooth intensities
-        smoothed_intensities = intensities
-        #window_size = 1
-        #smoothed_intensities = np.convolve(intensities, np.ones(window_size), 'valid') / window_size 
-        
-        # get the index of the local maxima. A maxima is a point where the intensity is greater than its neighbors (2 left and 2 right)
-        maxima = []
-        for i in range(2, len(smoothed_intensities)-2):
-            if smoothed_intensities[i] > smoothed_intensities[i-1] and smoothed_intensities[i] > smoothed_intensities[i-2] and smoothed_intensities[i] > smoothed_intensities[i+1] and smoothed_intensities[i] > smoothed_intensities[i+2]:
-                maxima.append(i)
-        
-        # plot the maxima
-        """plt.plot(smoothed_intensities)
-        plt.plot(maxima, [smoothed_intensities[i] for i in maxima], 'ro')
-        plt.show() """
-        
-        # x is a vector from 1 to the length of the smoothed intensities
-        x = np.arange(len(smoothed_intensities))
-        
-        # get the plot to the derive of the smoothed intensities
-        derive = np.gradient(smoothed_intensities, x)
-
-        # get pixel coordinates of the maxima
-        maxima_coords = []
-        for i in maxima:
-            maxima_coords.append(ordered_skeleton_points[i])
-            
-            
-        # plot the maxima on the image
-        """for x, y in maxima_coords:
-            for i in range(-1,1):
-                for j in range(-1,1):
-                    if x+i >= 0 and x+i < image.shape[0] and y+j >= 0 and y+j < image.shape[1]:
-                        image[x+i, y+j] = 65535
-            
-        display_image(image)"""
-        
-        # complete smoothed intensities until have MAX_LENGTH_OF_FEATURES values
-        while len(smoothed_intensities) < MAX_LENGTH_OF_FEATURES:
-            smoothed_intensities.append(0)
-    
-        derive = list(derive)
-        while len(derive) < MAX_LENGTH_OF_FEATURES:
-            derive.append(0)
-
-        # get the distance map
-        """distance_map = scipy.ndimage.distance_transform_edt(mask)  
-        # get the local maxima of the distance map
-        def detect_local_maxima(image):
-            # get the boolean mask of the local maxima
-            peaks_mask = ski.feature.peak_local_max(image, min_distance=4, threshold_abs=0)
-            # get the coordinates of the local maxima
-            coords = np.transpose(np.nonzero(peaks_mask))
-            return coords
-        maxima_coords = detect_local_maxima(distance_map)"""
-        
-    # ------------------------ METHOD 2 --------------------------------
-    else: # ne marche pas
-        smoothed_intensities = []
-        derive = []
-        # complete smoothed intensities until have MAX_LENGTH_OF_FEATURES values
-        while len(smoothed_intensities) < MAX_LENGTH_OF_FEATURES:
-            smoothed_intensities.append(0)
-        derive = list(derive)
-        while len(derive) < MAX_LENGTH_OF_FEATURES:
-            derive.append(0)
-
-        
-        # apply mask to original image
-        image = image * mask
-        
-        # Step 1: Apply Hessian Matrix to Image
-        hessian_elems = ski.feature.hessian_matrix(image, sigma=2, order='rc')
-        hessian_eigenvals = ski.feature.hessian_matrix_eigvals(hessian_elems)
-        
-        # Step 2: Threshold negative eigenvalues
-        eigenvalue1, eigenvalue2 = hessian_eigenvals[0], hessian_eigenvals[1]
-        
-        # Keep points where both eigenvalues are negative
-        negative_eigenvalue_mask = (eigenvalue1 < 0) & (eigenvalue2 < 0)
-        
-        # Step 3: Find local maxima in the negative eigenvalue mask (intensity peaks)
-        hessian_response = np.abs(eigenvalue1)  # or use the largest eigenvalue for intensity peaks
-        local_maxima = ski.feature.peak_local_max(hessian_response, min_distance=3, threshold_abs=np.mean(hessian_response))
-        
-        # Step 4: Filter maxima based on the mask and thresholding condition
-        maxima_coords = [(x, y) for x, y in local_maxima if mask[x, y] > 0 and negative_eigenvalue_mask[x, y]]
-
-
-        # Plot original vs. Hessian response
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-        axes[0].imshow(image, cmap='gray')
-        axes[0].set_title('Original Image')
-        axes[1].imshow(hessian_response, cmap='inferno')
-        axes[1].set_title('Hessian Response')
-        plt.show()
-        
-
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.imshow(image, cmap='gray')
-        ax.scatter([y for x, y in maxima_coords], [x for x, y in maxima_coords], 
-                color='red', s=20, label="Detected Centers")
-        ax.set_title("Synapse Centers Overlaid on Image")
-        ax.legend()
-        plt.show()
-    
-    
-    return smoothed_intensities, derive, maxima_coords
-    
-def preprocess_image_for_graph(img):
-
-    threshold_percentile=95
-    
-    # Apply Frangi filter to enhance tubular structures (synapses)
-    frangi_response = ski.filters.frangi(img ,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
-    # Apply hysteresis thresholding to the Frangi response
-    frangi_response = ski.filters.apply_hysteresis_threshold(frangi_response, 0.01, 0.2)
-    
-    frangi_response = remove_small_objects(frangi_response, option=2, min_size_value=25)
-
-    
-    # keep only components that are more like a line than a blob
-    labeled_image = ski.measure.label(frangi_response)
-    components = ski.measure.regionprops(labeled_image)
-    label_components = np.zeros_like(labeled_image)
-    for component in components:
-        # if components is more like a line than a blob, keep it
-        if component.major_axis_length/component.minor_axis_length > 4:
-            label_components[labeled_image == component.label] = 1
-        else:
-            label_components[labeled_image == component.label] = 0
-    frangi_response = label_components
-    
-    
-    # Normalize Frangi response to 0-1
-    frangi_response = (frangi_response - frangi_response.min()) / (frangi_response.max() - frangi_response.min())
-    
-    # Create mask from Frangi response
-    threshold = np.percentile(frangi_response, threshold_percentile)
-    mask = frangi_response > threshold
-    
-    
-    # Apply mask to the original image
-    masked_img = img.copy()
-    masked_img[~mask] = 0
-
-    # Find local maxima in the masked image
-    local_max = ski.feature.peak_local_max(masked_img, 
-                                    min_distance=5, # minimum distance between maxima
-                                    threshold_abs=0, # absolute threshold, means that we only consider maxima above this value
-                                    exclude_border=False)
-
-    return img, local_max
-    
-def worm_segmentation(img):
-    
-    # Apply Gaussian filter to smooth the image
-    img = ski.filters.meijering(img, sigmas=range(8, 14, 2), black_ridges=False) # quand on baisse le sigma max, on garde seulement les vaisseaux fins
-
-    binary_mask = img > np.mean(img)
-    
-    # Remove small objects from the binary mask
-    cleaned_mask = remove_small_objects(binary_mask, option=2, min_size_value=30)
-    
-    # transform it in boolean
-    cleaned_mask = cleaned_mask.astype(bool)
-    
-    # Fill small holes inside the worm
-    worm_mask = ski.morphology.remove_small_holes(cleaned_mask, area_threshold=50)
-    
-    # Apply binary closing to fill small gaps
-    worm_mask = ski.morphology.binary_closing(worm_mask, ski.morphology.disk(20))
-    
-    # keep the largest connected component (the worm)    
-    labeled_mask = ski.measure.label(worm_mask)
-    largest_component = np.argmax(np.bincount(labeled_mask.flat)[1:]) + 1  # +1 to skip background label
-    worm_mask = (labeled_mask == largest_component).astype(np.uint8)
-    
-    return worm_mask
-
+# graph functions
 def find_endpoints(skel, G, maxima_coords, skeletonize, angle_threshold_degrees=90):
     endpoints = [n for n in G.nodes if G.degree[n] == 1]
     angle_junctions = []
@@ -708,6 +300,51 @@ def graph_to_skeleton(G, node_to_coord, shape=None):
         
     return skel
 
+def preprocess_image_for_graph(img):
+
+    threshold_percentile=95
+    
+    # Apply Frangi filter to enhance tubular structures (synapses)
+    frangi_response = ski.filters.frangi(img ,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
+    # Apply hysteresis thresholding to the Frangi response
+    frangi_response = ski.filters.apply_hysteresis_threshold(frangi_response, 0.01, 0.2)
+    
+    frangi_response = remove_small_objects(frangi_response, option=2, min_size_value=25)
+
+    
+    # keep only components that are more like a line than a blob
+    labeled_image = ski.measure.label(frangi_response)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        # if components is more like a line than a blob, keep it
+        if component.major_axis_length/component.minor_axis_length > 4:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    frangi_response = label_components
+    
+    
+    # Normalize Frangi response to 0-1
+    frangi_response = (frangi_response - frangi_response.min()) / (frangi_response.max() - frangi_response.min())
+    
+    # Create mask from Frangi response
+    threshold = np.percentile(frangi_response, threshold_percentile)
+    mask = frangi_response > threshold
+    
+    
+    # Apply mask to the original image
+    masked_img = img.copy()
+    masked_img[~mask] = 0
+
+    # Find local maxima in the masked image
+    local_max = ski.feature.peak_local_max(masked_img, 
+                                    min_distance=5, # minimum distance between maxima
+                                    threshold_abs=0, # absolute threshold, means that we only consider maxima above this value
+                                    exclude_border=False)
+
+    return img, local_max
+    
 def get_synapses_graph(worm_mask, maxima_coords):
     
     NUMBER_OF_SEGMENTS = 20
@@ -1034,6 +671,353 @@ def get_synapses_graph(worm_mask, maxima_coords):
 
     return maxima
 
+
+
+def create_mask_synapse(image):
+    
+    image_copy = image.copy()
+    
+    #display_image(image)
+    
+    # ------ MASK 1 ------
+    image = ski.filters.frangi(image_copy,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
+    image = ski.filters.apply_hysteresis_threshold(image, 0.01, 0.2)
+    # Remove small objects
+    image = remove_small_objects(image, option=2, min_size_value=25)
+    # keep only components that are more like a line than a blob
+    labeled_image = ski.measure.label(image)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        # if components is more like a line than a blob, keep it
+        if component.major_axis_length/component.minor_axis_length > 4:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    mask1 = label_components
+    
+    
+    # ------ MASK 2 ------
+    """image = ski.filters.frangi(image_copy,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
+    image = ski.filters.apply_hysteresis_threshold(image, 0.02, 0.15)
+    # get skeleton
+    skeleton = ski.morphology.skeletonize(image)
+    # display_image(skeleton)
+    # keep only components of skeleton that are longer than 10 pixels 
+    labeled_image = ski.measure.label(skeleton)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        if component.major_axis_length > 50:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    image = label_components  
+    # dilate image
+    selem = ski.morphology.disk(1)
+    mask2 = ski.morphology.dilation(image, selem)"""
+    
+    
+    image = mask1 #| mask2 # combine masks
+    
+    #display_image(image)
+    
+    # ----- ADJUST CONTRAST ----- 
+    #image = anisotropic_diffusion(image) # remove noise and enhance edges
+    #image = exposure.adjust_gamma(image, gamma=3) 
+    #image = exposure.adjust_log(image, gain=2, inv=False) 
+    #image = ski.exposure.equalize_hist(image) # not a good idea
+        
+        
+    # ----- TUBNESS FILTERS -----
+    # Meijering filter
+    #meij_image = ski.filters.meijering(image, sigmas=range(1, 8, 2), black_ridges=False) # quand on baisse le sigma max, on garde seulement les vaisseaux fins
+    # Sato filter
+    #image_sato = ski.filters.sato(image, sigmas=range(1, 3, 1), black_ridges=False)
+    # Hessian filter
+    #image = ski.filters.hessian(image,black_ridges=False,sigmas=range(1, 5, 1), alpha=2, beta=0.5, gamma=15)
+    # Franji filter
+    #image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
+    #image = ski.filters.frangi(image,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=15)
+        
+        
+    #display_image(0.9 * image + 0.1 * image_sato)
+    #display_image(image)
+    
+    #image =  0.9 * image + 0.1 * meij_image
+    
+    #display_image(image)
+        
+    # gabors filter
+    #real, imag = ski.filters.gabor(image, frequency=0.5)
+    #image = real 
+        
+    # hysterisis thresholding
+    #image = ski.filters.apply_hysteresis_threshold(image, 0.01, 0.2)
+      
+        
+    # ----- DENOISE -----
+    #image = ski.restoration.denoise_nl_means(image, h=0.7)
+    #image = ski.restoration.denoise_bilateral(image)
+    #image = ski.restoration.denoise_tv_chambolle(image, weight=0.1)
+    #image = ski.restoration.denoise_bilateral(image)
+        
+
+    # ----- REMOVE SMALL OBJECTS -----
+    #image = remove_small_objects(image, option=2, min_size_value=25)
+        
+    
+    # keep only components that are more like a line than a blob
+    """labeled_image = ski.measure.label(image)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        # if components is more like a line than a blob, keep it
+        if component.major_axis_length/component.minor_axis_length > 4:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    image = label_components"""
+        
+        
+    """# get skeleton
+    skeleton = ski.morphology.skeletonize(image)
+
+    #display_image(skeleton)
+    
+    # keep only components of skeleton that are longer than 10 pixels
+    labeled_image = ski.measure.label(skeleton)
+    components = ski.measure.regionprops(labeled_image)
+    label_components = np.zeros_like(labeled_image)
+    for component in components:
+        if component.major_axis_length > 50:
+            label_components[labeled_image == component.label] = 1
+        else:
+            label_components[labeled_image == component.label] = 0
+    image = label_components"""
+    
+    #display_image(image)
+        
+    # ----- THRESHOLDING -----
+    # threshold otsu
+    #threshold_value = ski.filters.threshold_otsu(image)
+    # threshold local
+    #threshold_value = ski.filters.threshold_local(image, block_size=3)
+    # threshold mean
+    #threshold_value = ski.filters.threshold_mean(image)
+    # threshold triangle
+    #threshold_value = ski.filters.threshold_triangle(image)
+    # threshold yen
+    #threshold_value = ski.filters.threshold_yen(image)
+    # threshold li
+    #threshold_value = ski.filters.threshold_li(image)
+    #fig, ax = ski.filters.try_all_threshold(image, figsize=(8, 5), verbose=True) 
+    #plt.show()
+    #image = image  > threshold_value
+        
+    # ----- EDGE DETECTION -----
+    # canny edge detector
+    #image = ski.feature.canny(image, sigma=1)
+    # sobel filter - edge detection
+    #image = ski.filters.sobel(image)
+    # prewitt filter - edge detection
+    #image = ski.filters.prewitt(image)
+    # scharr filter
+    #image = ski.filters.scharr(image)
+    # roberts filter
+    #image = ski.filters.roberts(image)
+    # laplace filter
+    #image = ski.filters.laplace(image, ksize=3) # doesn't work
+   
+    
+    # Hough Transform to detect long edges
+    #lines = ski.transform.probabilistic_hough_line(mask_synapses, threshold=10, line_length=5, line_gap=3)
+    #for line in lines:
+        #p0, p1 = line
+        #mask_synapses[p0[0]:p1[0], p0[1]:p1[1]] = 1
+        
+    
+    # dilate image
+    selem = ski.morphology.disk(1)
+    image = ski.morphology.dilation(image, selem)
+
+    
+    # ----- CLOSE GAP BETWEEN EDGES -----
+    #image = close_gap_between_edges(image, max_distance=10)
+    
+    #display_image(image)
+    
+    return image
+     
+def order_skeleton_points_skan(skeleton):
+    # Create the Skeleton object
+    skel_obj = skan.csr.Skeleton(skeleton)
+    
+    # Get the summary with branch information
+    summary = skan.summarize(skel_obj, separator='-')
+    
+    # Create a flat list of all points from all paths
+    all_points = []
+    
+    for i in range(len(summary)):
+        # Get coordinates for each path
+        path_coords = skel_obj.path_coordinates(i)
+        # Add all points from this path to the flat list
+        for coord in path_coords:
+            all_points.append(tuple(coord))
+    
+    return all_points
+
+def get_high_intensity_pixels (mask, image):
+    
+    method = 1
+    # ------------------------ METHOD 1 --------------------------------
+    if method == 1:
+        
+        skeleton = ski.morphology.skeletonize(mask)
+            
+        ordered_skeleton_points = order_skeleton_points_skan(skeleton)
+        intensities = []
+        for x, y in ordered_skeleton_points:
+            intensities.append(image[x, y])
+            
+        # smooth intensities
+        smoothed_intensities = intensities
+        #window_size = 1
+        #smoothed_intensities = np.convolve(intensities, np.ones(window_size), 'valid') / window_size 
+        
+        # get the index of the local maxima. A maxima is a point where the intensity is greater than its neighbors (2 left and 2 right)
+        maxima = []
+        for i in range(2, len(smoothed_intensities)-2):
+            if smoothed_intensities[i] > smoothed_intensities[i-1] and smoothed_intensities[i] > smoothed_intensities[i-2] and smoothed_intensities[i] > smoothed_intensities[i+1] and smoothed_intensities[i] > smoothed_intensities[i+2]:
+                maxima.append(i)
+        
+        # plot the maxima
+        """plt.plot(smoothed_intensities)
+        plt.plot(maxima, [smoothed_intensities[i] for i in maxima], 'ro')
+        plt.show() """
+        
+        # x is a vector from 1 to the length of the smoothed intensities
+        x = np.arange(len(smoothed_intensities))
+        
+        # get the plot to the derive of the smoothed intensities
+        derive = np.gradient(smoothed_intensities, x)
+
+        # get pixel coordinates of the maxima
+        maxima_coords = []
+        for i in maxima:
+            maxima_coords.append(ordered_skeleton_points[i])
+            
+            
+        # plot the maxima on the image
+        """for x, y in maxima_coords:
+            for i in range(-1,1):
+                for j in range(-1,1):
+                    if x+i >= 0 and x+i < image.shape[0] and y+j >= 0 and y+j < image.shape[1]:
+                        image[x+i, y+j] = 65535
+            
+        display_image(image)"""
+        
+        # complete smoothed intensities until have MAX_LENGTH_OF_FEATURES values
+        while len(smoothed_intensities) < MAX_LENGTH_OF_FEATURES:
+            smoothed_intensities.append(0)
+    
+        derive = list(derive)
+        while len(derive) < MAX_LENGTH_OF_FEATURES:
+            derive.append(0)
+
+        # get the distance map
+        """distance_map = scipy.ndimage.distance_transform_edt(mask)  
+        # get the local maxima of the distance map
+        def detect_local_maxima(image):
+            # get the boolean mask of the local maxima
+            peaks_mask = ski.feature.peak_local_max(image, min_distance=4, threshold_abs=0)
+            # get the coordinates of the local maxima
+            coords = np.transpose(np.nonzero(peaks_mask))
+            return coords
+        maxima_coords = detect_local_maxima(distance_map)"""
+        
+    # ------------------------ METHOD 2 --------------------------------
+    else: # ne marche pas
+        smoothed_intensities = []
+        derive = []
+        # complete smoothed intensities until have MAX_LENGTH_OF_FEATURES values
+        while len(smoothed_intensities) < MAX_LENGTH_OF_FEATURES:
+            smoothed_intensities.append(0)
+        derive = list(derive)
+        while len(derive) < MAX_LENGTH_OF_FEATURES:
+            derive.append(0)
+
+        
+        # apply mask to original image
+        image = image * mask
+        
+        # Step 1: Apply Hessian Matrix to Image
+        hessian_elems = ski.feature.hessian_matrix(image, sigma=2, order='rc')
+        hessian_eigenvals = ski.feature.hessian_matrix_eigvals(hessian_elems)
+        
+        # Step 2: Threshold negative eigenvalues
+        eigenvalue1, eigenvalue2 = hessian_eigenvals[0], hessian_eigenvals[1]
+        
+        # Keep points where both eigenvalues are negative
+        negative_eigenvalue_mask = (eigenvalue1 < 0) & (eigenvalue2 < 0)
+        
+        # Step 3: Find local maxima in the negative eigenvalue mask (intensity peaks)
+        hessian_response = np.abs(eigenvalue1)  # or use the largest eigenvalue for intensity peaks
+        local_maxima = ski.feature.peak_local_max(hessian_response, min_distance=3, threshold_abs=np.mean(hessian_response))
+        
+        # Step 4: Filter maxima based on the mask and thresholding condition
+        maxima_coords = [(x, y) for x, y in local_maxima if mask[x, y] > 0 and negative_eigenvalue_mask[x, y]]
+
+
+        # Plot original vs. Hessian response
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        axes[0].imshow(image, cmap='gray')
+        axes[0].set_title('Original Image')
+        axes[1].imshow(hessian_response, cmap='inferno')
+        axes[1].set_title('Hessian Response')
+        plt.show()
+        
+
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(image, cmap='gray')
+        ax.scatter([y for x, y in maxima_coords], [x for x, y in maxima_coords], 
+                color='red', s=20, label="Detected Centers")
+        ax.set_title("Synapse Centers Overlaid on Image")
+        ax.legend()
+        plt.show()
+    
+    
+    return smoothed_intensities, derive, maxima_coords   
+
+def worm_segmentation(img):
+    
+    # Apply Gaussian filter to smooth the image
+    img = ski.filters.meijering(img, sigmas=range(8, 14, 2), black_ridges=False) # quand on baisse le sigma max, on garde seulement les vaisseaux fins
+
+    binary_mask = img > np.mean(img)
+    
+    # Remove small objects from the binary mask
+    cleaned_mask = remove_small_objects(binary_mask, option=2, min_size_value=30)
+    
+    # transform it in boolean
+    cleaned_mask = cleaned_mask.astype(bool)
+    
+    # Fill small holes inside the worm
+    worm_mask = ski.morphology.remove_small_holes(cleaned_mask, area_threshold=50)
+    
+    # Apply binary closing to fill small gaps
+    worm_mask = ski.morphology.binary_closing(worm_mask, ski.morphology.disk(20))
+    
+    # keep the largest connected component (the worm)    
+    labeled_mask = ski.measure.label(worm_mask)
+    largest_component = np.argmax(np.bincount(labeled_mask.flat)[1:]) + 1  # +1 to skip background label
+    worm_mask = (labeled_mask == largest_component).astype(np.uint8)
+    
+    return worm_mask
+
+
+
 def get_synapse_using_graph(image):
     # Apply preprocessing to the image
     img, local_max = preprocess_image_for_graph(image)
@@ -1047,6 +1031,7 @@ def get_synapse_using_graph(image):
     maxima = list(map(tuple, maxima))
     
     return maxima
+   
     
 def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """

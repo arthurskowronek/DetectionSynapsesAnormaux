@@ -2,7 +2,8 @@ from utils import *
 from training import *
 from feature import *
 from preprocessing import *
-from crible_functions import *
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 
 def test_model_accuracy(model_types):

@@ -1,11 +1,9 @@
 import os
 import shutil
 import joblib
-import datetime
 import random
 import numpy as np
 import pandas as pd
-from numpy.random import RandomState, MT19937, SeedSequence
 import matplotlib.pyplot as plt
 from pathlib import Path
 from skimage.io import imread
@@ -17,27 +15,7 @@ import seaborn as sns
 from skimage.transform import rotate
 from imageio import imwrite
 
-# Constants
-DATE = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-DEFAULT_PKL_NAME = f'dataset_{DATE}.pkl'
-DATA_DIR = Path('./data')
-DATASET_PKL_DIR = Path('./dataset_pkl')
-MUTANT_DIR = DATA_DIR / '_Mutant'
-WT_DIR = DATA_DIR / '_WT'
-N_FEAT = 12
-N_BINS_FEAT = 20
-NUMBER_OF_PIXELS = 1024
-IMAGE_SIZE = (NUMBER_OF_PIXELS, NUMBER_OF_PIXELS)
-MIN_AREA_COMPO = 0
-MIN_AREA_FEATURE = 10
-
-# Training parameters
-N_RUNS = 100
-MAX_BINS = 255
-LEARN_RATE = 0.1
-MAX_ITER = 1000
-IN_PARAM = np.array([MAX_BINS, LEARN_RATE, MAX_ITER], dtype='float')
-SEED = RandomState(MT19937(SeedSequence(753))) # Set random seed for reproducibility
+from constants import *
 
 
 
