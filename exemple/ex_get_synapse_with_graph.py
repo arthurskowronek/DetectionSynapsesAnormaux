@@ -13,6 +13,7 @@ from skimage.draw import line
 from skimage.morphology import remove_small_holes, binary_closing, disk
 from scipy.spatial.distance import cdist
 import itertools
+from PIL import Image
 
 def signed_distance_to_segment_2d(seg, p1):
     seg = np.array(seg)  # Convert 'seg' to a NumPy array
@@ -394,7 +395,10 @@ def preprocessing(image_path, threshold_percentile=95):
         (original image, frangi filter response, mask, detected maxima, filtered maxima)
     """
     # Load the image
-    img = io.imread(image_path)
+    img = Image.open(image_path).convert("I;16")
+    img = np.array(img)
+ 
+    
     if len(img.shape) > 2:
         img = img[:,:,0]  # Take first channel if it's RGB
     
@@ -824,11 +828,12 @@ if __name__ == "__main__":
     
     for image in list_of_images:   
         #image = "EN6028-10_MMStack.ome.tif"
-        image = "EN6024-03_MMStack.ome.tif"   
+        #image = "EN6024-03_MMStack.ome.tif"   
         #image = "EN6017-13_MMStack.ome.tif" 
         #image = "EN6017-05_MMStack.ome.tif" 
         image_path = os.path.join(path_directory, image)
         print(f"---------- Processing {image_path} ----------")
+            
       
         try:
             # Preprocessing

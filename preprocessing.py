@@ -117,19 +117,30 @@ def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1)
         angle_junctions = [maxima_coords[i] for i in angle_junctions]
 
     # Plotting the skeleton with endpoints and junctions
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(skel, cmap='gray')
     for y, x in endpoints:
         plt.scatter(x, y, color='red', s=10)
     for y, x in angle_junctions:
         plt.scatter(x, y, color='blue', s=10)
     plt.title("Endpoints and Junctions") 
-    plt.show()
+    plt.show()"""
 
     # Initiate variables for pathfinding
     all_paths = {}
     endpoint_indices = list(range(len(endpoints)))
     angle_junction_set = set(map(tuple, angle_junctions))
+    
+    if len(endpoints) < 2:
+        # create path with the skeleton
+        if skeletonize:
+            path = list(np.argwhere(skel))
+            all_paths[endpoint_indices[0]] = {
+                "path": path,
+                "maxima_count": len(path),
+                "length": len(path)
+            }
+        
     
     # Iterate over all pairs of endpoints to find all possible paths
     for i in endpoint_indices:
@@ -199,12 +210,12 @@ def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1)
                                 "maxima_count": subpath_maxima_count,
                                 "length": len(subpath)
                             }
-                        
-
                 
             except nx.NetworkXNoPath:
                 #print(f"No path between {s_idx} and {e_idx}")
                 continue
+            
+  
 
     # Sorting paths
     sort_key = "length" if skeletonize else "maxima_count"
@@ -214,14 +225,13 @@ def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1)
     """for i, data in enumerate(sorted_paths):
         print(f"Path {i}: {sort_key.capitalize()} = {data[sort_key]}")"""
 
+
     selected_paths = []
     used_nodes = set()
 
     for path_data in sorted_paths:
         path = path_data["path"]
         if keep == 1 and not selected_paths:
-            
-            
             selected_paths.append(path)
         elif keep == 2 and not used_nodes.intersection(path):
             selected_paths.append(path)
@@ -229,27 +239,31 @@ def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1)
         if len(selected_paths) == keep:
             break
 
-
-
-
     # Convert node indices to coordinates if needed
     if not skeletonize:
         selected_paths = [[maxima_coords[pt] for pt in path] for path in selected_paths]
 
     # Plot selected paths
-    flat_points = [pt for path in selected_paths for pt in path]
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(skel, cmap='gray')
     for path in selected_paths:
         y, x = zip(*path)
         plt.plot(x, y, color='red', linewidth=2)
     plt.title("Selected Paths")
-    plt.show()
-
+    plt.show()"""
+    
     # Create binary image of the main branch
+    flat_points = [pt for path in selected_paths for pt in path]
+    
     main_branch = np.zeros_like(skel, dtype=bool)
     for y, x in flat_points:
         main_branch[y, x] = True
+        
+    # Show the main branch
+    """plt.figure(figsize=(8, 8))
+    plt.imshow(main_branch, cmap='gray')
+    plt.title("Main Branch")
+    plt.show()"""
 
     return G, main_branch
 
@@ -344,6 +358,7 @@ def preprocess_image_for_graph(img):
                                     threshold_abs=0, # absolute threshold, means that we only consider maxima above this value
                                     exclude_border=False)
 
+
     return img, local_max
     
 def get_synapses_graph(worm_mask, maxima_coords):
@@ -354,12 +369,6 @@ def get_synapses_graph(worm_mask, maxima_coords):
     skeleton = ski.morphology.skeletonize(worm_mask)
     
     G, skeleton = skeleton_keep_main_branch(None, skeleton, maxima_coords, skeletonize = True, keep=1)
-    
-    # plot
-    """plt.figure(figsize=(8, 8))
-    plt.imshow(skeleton, cmap='gray')
-    plt.title("Skeleton of Worm (Main Branch)")
-    plt.show()"""
     
     # 2. Get ordered skeleton coordinates
     skel_path = order_skeleton_points_skan(skeleton)
@@ -426,8 +435,8 @@ def get_synapses_graph(worm_mask, maxima_coords):
     # find coordinate of the middle of each segment
     middle_coords = [skel_path[i * seg_len + seg_len // 2] for i in range(NUMBER_OF_SEGMENTS)]
     
-    plt.figure(figsize=(8, 8))
-    plt.imshow(worm_mask, cmap='gray')
+    #plt.figure(figsize=(8, 8))
+    #plt.imshow(worm_mask, cmap='gray')
     dic_segments = {}
     for i in range(NUMBER_OF_SEGMENTS):
         start = middle_coords[i]
@@ -496,11 +505,11 @@ def get_synapses_graph(worm_mask, maxima_coords):
         dic_segments[i] = (start, mid_pos, mid_neg, end_pos, end_neg, length_mid_pos, length_mid_neg, length_end_pos, length_end_neg)
 
         # Plot the full perpendicular line
-        plt.plot([end_neg[1], end_pos[1]], [end_neg[0], end_pos[0]], 'g-', label=f'Segment {i}' if i == 0 else "")
+        #plt.plot([end_neg[1], end_pos[1]], [end_neg[0], end_pos[0]], 'g-', label=f'Segment {i}' if i == 0 else "")
         
 
     # plot lines between each end_pos points
-    for i in range(NUMBER_OF_SEGMENTS-1):
+    """for i in range(NUMBER_OF_SEGMENTS-1):
         start = dic_segments[i][0]
         end = dic_segments[i+1][0]
         plt.plot([start[1], end[1]], [start[0], end[0]], 'b--', label=f'Segment {i}' if i == 0 else "")
@@ -520,7 +529,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     
     plt.title("Segment Directions with Perpendicular Lines (Both Directions)")
     plt.legend()
-    plt.show()
+    plt.show()"""
     
 
     
@@ -660,15 +669,15 @@ def get_synapses_graph(worm_mask, maxima_coords):
     # keep only nodes that are in skeleton
     maxima = np.array([node for node in maxima_coords if skeleton[node[0], node[1]] == 1])
         
-    print("Number of nodes in the final graph:", len(maxima))
+    #print("Number of nodes in the final graph:", len(maxima))
     # plot image with maxima_filtered
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
     plt.scatter(maxima[:, 1], maxima[:, 0], s=1, color='red')
     #for i in range(len(nodes)):
         #plt.scatter(nodes[i][1], nodes[i][0], s=1, color='red')
     plt.title("Maxima Coordinates")
-    plt.show()
+    plt.show()"""
 
     return maxima
 
@@ -1043,21 +1052,19 @@ def is_a_roll_worm(worm_mask):
     
 def get_synapse_using_graph(image):
     # Apply preprocessing to the image
-    img, local_max = preprocess_image_for_graph(image)
     
+    img, local_max = preprocess_image_for_graph(image) 
+
     # Get a segmentation mask
     worm_mask = worm_segmentation(img)
-    
-    # Detect roll worm
+
     if is_a_roll_worm(worm_mask):
         return []
     else:
         # Get the synapses graph to get only the synapses
         maxima = get_synapses_graph(worm_mask, local_max)
-        maxima = list(map(tuple, maxima))
-        
+        maxima = list(map(tuple, maxima))   
         return maxima
-   
     
 def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
@@ -1114,10 +1121,11 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
     
     
     for im_num, image in enumerate(X):
+        
         print(f'Processing image {im_num+1}/{len(X)}')
         
         original_image = image.copy()
-        
+            
         if method == 1:
             # Create mask for synapses
             mask_synapses[im_num] = create_mask_synapse(image)
@@ -1125,41 +1133,48 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
             X_preprocessed[im_num] = original_image * mask_synapses[im_num]
             X_intensity[im_num], X_derivative_intensity[im_num], maxima_coords[im_num] = get_high_intensity_pixels(mask_synapses[im_num], image)
         elif method == 2:
-            maxima_coords[im_num] = get_synapse_using_graph(original_image)
-            
-            # creat a mask with disk of radius 5 around each maxima
-            mask_synapses[im_num] = np.zeros_like(image)
-            for coord in maxima_coords[im_num]:
-                rr, cc = ski.draw.disk(coord, 5, shape=original_image.shape)
-                mask_synapses[im_num][rr, cc] = 1
-            
-            # apply mask to original image
-            X_preprocessed[im_num] = original_image * mask_synapses[im_num]
+            try:
+                maxima_coords[im_num] = get_synapse_using_graph(original_image)
+                    
+                # creat a mask with disk of radius 5 around each maxima
+                mask_synapses[im_num] = np.zeros_like(image)
+                for coord in maxima_coords[im_num]:
+                    rr, cc = ski.draw.disk(coord, 5, shape=original_image.shape)
+                    mask_synapses[im_num][rr, cc] = 1
+                        
+                # apply mask to original image
+                X_preprocessed[im_num] = original_image * mask_synapses[im_num]
+            except Exception as e:
+                print(f"Error in image {im_num}: {e}")
+                maxima_coords[im_num] = []
+                mask_synapses[im_num] = np.zeros_like(image)
+                X_preprocessed[im_num] = original_image * mask_synapses[im_num]
+                X_intensity[im_num], X_derivative_intensity[im_num], maxima_coords[im_num] = get_high_intensity_pixels(mask_synapses[im_num], image)
         elif method == 3:
             # ---------- GET ALL PEAKS ----------
             worm_mask = worm_segmentation(image)    
             masked_img = image.copy()
             masked_img = masked_img * worm_mask
-            
+                
             # Find local maxima in the masked image
             all_maxima = ski.feature.peak_local_max(masked_img, min_distance=5, threshold_abs=0, exclude_border=False)
-            
+                
             # ---------- FIRST METHOD ----------
             mask_synapses_first_method = create_mask_synapse(image)
             _ ,_ , maxima_first_method = get_high_intensity_pixels(mask_synapses_first_method, image)
-        
+            
             # ---------- SECOND METHOD ----------
             maxima_second_method = get_synapse_using_graph(original_image)
-            
+                
             # ---------- COMBINAISON ----------
             maxima_coords[im_num] = combine_maxima(all_maxima, maxima_first_method, maxima_second_method)
-            
+                
             # creat a mask with disk of radius 5 around each maxima
             mask_synapses[im_num] = np.zeros_like(image)
             for coord in maxima_coords[im_num]:
                 rr, cc = ski.draw.disk(coord, 5, shape=original_image.shape)
                 mask_synapses[im_num][rr, cc] = 1
-            
+                
             # apply mask to original image
             X_preprocessed[im_num] = original_image * mask_synapses[im_num]
         else:

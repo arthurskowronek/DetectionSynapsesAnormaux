@@ -1019,11 +1019,10 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
         
             component, label_seg = get_regions_of_interest(maxima, image_original, mask)
             feat = create_feature_vector(image, component, intensity[im_num], n_bins, 
-                                         include_texture=False, include_morphological=False,
+                                         include_texture=True, include_morphological=False,
                                          include_histogram=False, include_multiscale=False,
                                          include_other=False)
             
-                         
             
             features['label'].append(y[im_num])
             features['data'].append(feat)
