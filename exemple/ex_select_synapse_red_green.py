@@ -159,12 +159,17 @@ def preprocessing(img, threshold_percentile=95):
     masked_img = img.copy()
     masked_img = masked_img * worm_mask
     
+    # Show image
+    plt.imshow(masked_img, cmap='gray')
+    plt.title('Masked Image')
+    plt.show()
+    
     frangi_image = frangi(masked_img ,black_ridges=False,sigmas=range(1, 3, 1), alpha=0.5, beta=0.5, gamma=70)
     
     # show image with mask
-    """plt.imshow(masked_img, cmap='gray')
-    plt.title('Masked Image')
-    plt.show()"""
+    plt.imshow(masked_img, cmap='gray')
+    plt.title('Masked Image after Frangi')
+    plt.show()
     
 
     # Find local maxima in the masked image

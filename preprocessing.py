@@ -1,16 +1,17 @@
-import numpy as np
-import skimage as ski
 import skan
 import joblib
 import shutil
-from pathlib import Path
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import matplotlib.colors as mcolors
+import itertools
+import numpy as np
+import skimage as ski
 import networkx as nx
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from scipy.spatial.distance import cdist
 from skimage.draw import line
-import itertools
+from skimage.morphology import binary_closing, disk
+from pathlib import Path
 
 from constants import *
 
@@ -1017,7 +1018,29 @@ def worm_segmentation(img):
     return worm_mask
 
 
-
+def combine_maxima(all_maxima, maxima1, maxima2):
+    
+    return list(set(maxima1) | set(maxima2))
+   
+def is_a_roll_worm(worm_mask):
+    
+    # get the major axis of the worm
+    labeled_mask = ski.measure.label(worm_mask)
+    components = ski.measure.regionprops(labeled_mask)
+    major_axis = []
+    minor_axis = []
+    for component in components:
+        major_axis.append(component.major_axis_length)
+        minor_axis.append(component.minor_axis_length)
+    # get the maximum major axis and minor axis
+    max_major_axis = np.max(major_axis)
+    min_minor_axis = np.min(minor_axis)
+    
+    if max_major_axis / min_minor_axis > 1.5:
+        return False
+    else:
+        return True   
+    
 def get_synapse_using_graph(image):
     # Apply preprocessing to the image
     img, local_max = preprocess_image_for_graph(image)
@@ -1025,12 +1048,15 @@ def get_synapse_using_graph(image):
     # Get a segmentation mask
     worm_mask = worm_segmentation(img)
     
-    # Get the synapses graph to get only the synapses
-    maxima = get_synapses_graph(worm_mask, local_max)
-    
-    maxima = list(map(tuple, maxima))
-    
-    return maxima
+    # Detect roll worm
+    if is_a_roll_worm(worm_mask):
+        return []
+    else:
+        # Get the synapses graph to get only the synapses
+        maxima = get_synapses_graph(worm_mask, local_max)
+        maxima = list(map(tuple, maxima))
+        
+        return maxima
    
     
 def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
@@ -1098,7 +1124,7 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
             # apply mask to original image
             X_preprocessed[im_num] = original_image * mask_synapses[im_num]
             X_intensity[im_num], X_derivative_intensity[im_num], maxima_coords[im_num] = get_high_intensity_pixels(mask_synapses[im_num], image)
-        else:
+        elif method == 2:
             maxima_coords[im_num] = get_synapse_using_graph(original_image)
             
             # creat a mask with disk of radius 5 around each maxima
@@ -1109,6 +1135,35 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
             
             # apply mask to original image
             X_preprocessed[im_num] = original_image * mask_synapses[im_num]
+        elif method == 3:
+            # ---------- GET ALL PEAKS ----------
+            worm_mask = worm_segmentation(image)    
+            masked_img = image.copy()
+            masked_img = masked_img * worm_mask
+            
+            # Find local maxima in the masked image
+            all_maxima = ski.feature.peak_local_max(masked_img, min_distance=5, threshold_abs=0, exclude_border=False)
+            
+            # ---------- FIRST METHOD ----------
+            mask_synapses_first_method = create_mask_synapse(image)
+            _ ,_ , maxima_first_method = get_high_intensity_pixels(mask_synapses_first_method, image)
+        
+            # ---------- SECOND METHOD ----------
+            maxima_second_method = get_synapse_using_graph(original_image)
+            
+            # ---------- COMBINAISON ----------
+            maxima_coords[im_num] = combine_maxima(all_maxima, maxima_first_method, maxima_second_method)
+            
+            # creat a mask with disk of radius 5 around each maxima
+            mask_synapses[im_num] = np.zeros_like(image)
+            for coord in maxima_coords[im_num]:
+                rr, cc = ski.draw.disk(coord, 5, shape=original_image.shape)
+                mask_synapses[im_num][rr, cc] = 1
+            
+            # apply mask to original image
+            X_preprocessed[im_num] = original_image * mask_synapses[im_num]
+        else:
+            raise ValueError("Invalid method. Choose 1, 2, or 3.")
     
         
     # Save preprocessing results

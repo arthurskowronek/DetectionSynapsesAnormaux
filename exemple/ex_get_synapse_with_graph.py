@@ -116,14 +116,14 @@ def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1)
         angle_junctions = [maxima_coords[i] for i in angle_junctions]
 
     # Plotting the skeleton with endpoints and junctions
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(skel, cmap='gray')
     for y, x in endpoints:
         plt.scatter(x, y, color='red', s=10)
     for y, x in angle_junctions:
         plt.scatter(x, y, color='blue', s=10)
     plt.title("Endpoints and Junctions") 
-    plt.show()
+    plt.show()"""
 
     # Initiate variables for pathfinding
     all_paths = {}
@@ -237,13 +237,13 @@ def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1)
 
     # Plot selected paths
     flat_points = [pt for path in selected_paths for pt in path]
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(skel, cmap='gray')
     for path in selected_paths:
         y, x = zip(*path)
         plt.plot(x, y, color='red', linewidth=2)
     plt.title("Selected Paths")
-    plt.show()
+    plt.show()"""
 
     # Create binary image of the main branch
     main_branch = np.zeros_like(skel, dtype=bool)
@@ -293,6 +293,28 @@ def remove_small_objects(image, option=1, min_size_value=30):
         print("Option not available")
         return image
 
+def is_a_roll_worm(worm_mask):
+
+    # get the major axis of the worm
+    labeled_mask = ski.measure.label(worm_mask)
+    components = ski.measure.regionprops(labeled_mask)
+    major_axis = []
+    minor_axis = []
+    for component in components:
+        major_axis.append(component.major_axis_length)
+        minor_axis.append(component.minor_axis_length)
+    # get the maximum major axis and minor axis
+    max_major_axis = np.max(major_axis)
+    min_minor_axis = np.min(minor_axis)
+    
+    #print("Max major axis:", max_major_axis)
+    #print("Min minor axis:", min_minor_axis)
+    
+    if max_major_axis / min_minor_axis > 1.5:
+        return False
+    else:
+        return True   
+
 def worm_segmentation(img):
     
     # Apply Gaussian filter to smooth the image
@@ -305,8 +327,8 @@ def worm_segmentation(img):
     
     # Thresholding to create a binary mask
     threshold = filters.threshold_otsu(img)
-    """print("Threshold value:", threshold)
-    print("Mean value:", np.mean(img))"""
+    #print("Threshold value:", threshold)
+    #print("Mean value:", np.mean(img))
     binary_mask = img > np.mean(img)
     
     # plot
@@ -443,7 +465,7 @@ def preprocessing(image_path, threshold_percentile=95):
     plt.title(f'Local Maxima ({len(local_max)})')
     plt.show()
     
-    print("Number of local maxima detected:", len(local_max))
+    #print("Number of local maxima detected:", len(local_max))
     
     # Analyze connectivity of maxima based on direction
     filtered_maxima = local_max.copy()
@@ -510,7 +532,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
         directions.append(vec)
         
     # show on the image directions of the segments
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
     for i in range(NUMBER_OF_SEGMENTS):
         start = skel_path[i * seg_len]
@@ -518,7 +540,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
         plt.arrow(start[1], start[0], (end[1] - start[1]), (end[0] - start[0]), 
                   head_width=2, head_length=5, fc='red', ec='red')
     plt.title("Segment Directions")
-    plt.show()
+    plt.show()"""
     
     # put a black pixel
     worm_mask[0, :] = 0  # Top row
@@ -676,10 +698,8 @@ def get_synapses_graph(worm_mask, maxima_coords):
     #print("Number of cords:", NUMBER_OF_CORDS)
 
     # 6. Plot maxima with their assigned slice
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
-    # Map node positions
-    pos = {i: (x[1], x[0]) for i, x in enumerate(maxima_coords)}
     # Create a colormap for the 6 label categories
     cmap = cm.get_cmap('tab10')  # tab10 is good for up to 10 categories
     norm = mcolors.Normalize(vmin=0, vmax=5)
@@ -688,7 +708,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.scatter([x[1] for x in maxima_coords], [x[0] for x in maxima_coords],
                 c=node_colors, s=10, alpha=1)
     plt.title("Maxima with Assigned Slices")
-    plt.show()
+    plt.show()"""
     
 
                
@@ -752,45 +772,45 @@ def get_synapses_graph(worm_mask, maxima_coords):
     #print("Number of nodes in the graph:", len(G.nodes))
     #print("Lenght of maxima_coords:", len(maxima_coords))
     # 8. Plot graph
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
     pos = {i: (x[1], x[0]) for i, x in enumerate(maxima_coords)}
     nx.draw(G, pos, node_size=1, node_color='red', edge_color='blue')
     plt.title("Directional Graph of Maxima")
-    plt.show()
+    plt.show()"""
     
     # 9. Convert graph to skeleton
     node_to_coord = {i: tuple(coord) for i, coord in enumerate(maxima_coords)}
     skeleton = graph_to_skeleton(G, node_to_coord, shape=worm_mask.shape)
     
     # plot skeleton
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(skeleton, cmap='gray')
     plt.title("Skeleton from Graph")
-    plt.show()
+    plt.show()"""
     
     # 10. Keep only the NUMBER_OF_CORDS main branches of the skeleton
     #print("10. Keep only the NUMBER_OF_CORDS main branches of the skeleton")
     G, skeleton = skeleton_keep_main_branch(G, skeleton, maxima_coords, skeletonize = False, keep=NUMBER_OF_CORDS)
     
     # 11. Plot the skeleton
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(skeleton, cmap='gray')
     plt.title(f"Skeleton of Worm ({NUMBER_OF_CORDS} Branches)")
-    plt.show()    
+    plt.show() """   
     
     # keep only nodes that are in skeleton
     maxima = np.array([node for node in maxima_coords if skeleton[node[0], node[1]] == 1])
         
-    print("Number of nodes in the final graph:", len(maxima))
+    #print("Number of nodes in the final graph:", len(maxima))
     # plot image with maxima_filtered
-    plt.figure(figsize=(8, 8))
+    """plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
     plt.scatter(maxima[:, 1], maxima[:, 0], s=1, color='red')
     #for i in range(len(nodes)):
         #plt.scatter(nodes[i][1], nodes[i][0], s=1, color='red')
     plt.title("Maxima Coordinates")
-    plt.show()
+    plt.show()"""
 
     return maxima
 
@@ -803,8 +823,8 @@ if __name__ == "__main__":
     list_of_images = os.listdir(path_directory)
     
     for image in list_of_images:   
-        image = "EN6028-10_MMStack.ome.tif"
-        #image = "EN6024-04_MMStack.ome.tif"   
+        #image = "EN6028-10_MMStack.ome.tif"
+        image = "EN6024-03_MMStack.ome.tif"   
         #image = "EN6017-13_MMStack.ome.tif" 
         #image = "EN6017-05_MMStack.ome.tif" 
         image_path = os.path.join(path_directory, image)
@@ -818,8 +838,16 @@ if __name__ == "__main__":
             # Segmentation  
             worm_mask = worm_segmentation(img)
             
-        
-            maxima = get_synapses_graph(worm_mask, filtered_maxima)
+            # Detect roll worm
+            if is_a_roll_worm(worm_mask):
+                maxima = []
+                print("Roll worm detected")
+            else:
+                # Get the synapses graph to get only the synapses
+                maxima = get_synapses_graph(worm_mask, local_max)
+                maxima = list(map(tuple, maxima))
+    
+    
         except Exception as e:
             print(f"Error processing {image_path}: {e}")
             continue
