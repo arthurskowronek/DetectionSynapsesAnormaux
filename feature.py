@@ -786,6 +786,7 @@ def create_feature_vector(G, mean_intensity, median_width, image, component_prop
         max_distance = np.max(edge_lengths)
         median_distance = np.median(edge_lengths)
         min_distance = np.min(edge_lengths)
+        # Add to feature vector
         feat_vector.extend([mean_distance, max_distance, median_distance, min_distance])
         
     except Exception as e:
