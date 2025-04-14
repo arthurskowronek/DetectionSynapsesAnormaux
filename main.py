@@ -9,7 +9,7 @@ from sklearn.decomposition import PCA
 def test_model_accuracy(model_types):
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-04-04_11-35-21'
-    data = create_dataset(reimport_images=False, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False, pkl_name=filename_pkl_dataset + '.pkl')
+    data = create_dataset(reimport_images=True, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Convert to numpy arrays
     X = np.array(data['data'])
@@ -24,10 +24,10 @@ def test_model_accuracy(model_types):
     
     # ---------- Preprocessing ----------
     filename_pkl_dataset = 'dataset_2025-03-12_22-29-09_preprocessing_1'
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(method=2, recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
-    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
+    X_features, features = get_feature_vector(G, median_width, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
     
     # ---------- Feature Reduction ----------
     # Scale features
@@ -37,15 +37,17 @@ def test_model_accuracy(model_types):
     # change NaN values to 0
     X_features = np.nan_to_num(X_features)
     
+    X_features_copied = X_features.copy()
+    
     pca = PCA(n_components=2)
-    X_features = pca.fit_transform(X_features)
+    X_features_PCA = pca.fit_transform(X_features_copied)
     
     print(f"Explained variance ratio: {pca.explained_variance_ratio_}")
     print(f"Explained variance: {pca.explained_variance_}")
     
     # plot the feature space with the 2 first components and label each point by if it is a mutant or not
     plt.figure(figsize=(10, 10))
-    plt.scatter(X_features[:, 0], X_features[:, 1], c=y, cmap='viridis', alpha=0.5)
+    plt.scatter(X_features_PCA[:, 0], X_features_PCA[:, 1], c=y, cmap='viridis', alpha=0.5)
     plt.title('Feature space with PCA')
     plt.xlabel('PCA 1')
     plt.ylabel('PCA 2')
@@ -65,7 +67,12 @@ def test_model_accuracy(model_types):
     
     number_features_after = X_features.shape[1]
     
-
+    # Detect indice of elements in X_feat which contain only 0s
+    indices = np.where(np.all(X_features == 0, axis=1))[0]
+    # Remove these elements from X_feat and y
+    X_features = np.delete(X_features, indices, axis=0)
+    y = np.delete(y, indices, axis=0)
+    
     # ---------- Test all models and generate a comprehensive report ----------
     results = {}
 
@@ -122,7 +129,7 @@ def test_pipeline():
     
     # ---------- Preprocessing ----------
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     
     #X_hist = get_histogram_vector(X_preprocessed)
@@ -138,7 +145,7 @@ def test_pipeline():
         print(f'Image {i} done')"""
         
         
-    X_features, features = get_feature_vector(X_preprocessed, y, X, maxima, mask, intensity, recompute=True) # mask
+    X_features, features = get_feature_vector(G, median_width, X_preprocessed, y, X, maxima, mask, intensity, recompute=True) # mask
     # X_reduced = select_features(X_feat, y, method='lasso')
     
     
@@ -257,7 +264,7 @@ if __name__ == "__main__":
         
     # ---------- Test model accuracy ----------
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
-    model_types = ['hist_gradient_boosting']
+    model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp']
     #test_model_accuracy(model_types)
     
     

@@ -501,12 +501,15 @@ def get_synapses_graph(worm_mask, maxima_coords):
         length_mid_neg = np.linalg.norm(np.array(mid_neg) - np.array(start)) # length of the segment from start to mid_neg
         length_end_pos = np.linalg.norm(np.array(end_pos) - np.array(start)) # length of the segment from start to end_pos
         length_end_neg = np.linalg.norm(np.array(end_neg) - np.array(start)) # length of the segment from start to end_neg
+        length_total = np.linalg.norm(np.array(end_pos) - np.array(end_neg)) # length of the segment from end_pos to end_neg
             
-        dic_segments[i] = (start, mid_pos, mid_neg, end_pos, end_neg, length_mid_pos, length_mid_neg, length_end_pos, length_end_neg)
+        dic_segments[i] = (start, mid_pos, mid_neg, end_pos, end_neg, length_mid_pos, length_mid_neg, length_end_pos, length_end_neg, length_total)
 
         # Plot the full perpendicular line
         #plt.plot([end_neg[1], end_pos[1]], [end_neg[0], end_pos[0]], 'g-', label=f'Segment {i}' if i == 0 else "")
-        
+       
+    # Calculate the median of the lengths of the perpendicular lines
+    median_width = np.median([dic_segments[i][9] for i in range(NUMBER_OF_SEGMENTS)])
 
     # plot lines between each end_pos points
     """for i in range(NUMBER_OF_SEGMENTS-1):
@@ -679,7 +682,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.title("Maxima Coordinates")
     plt.show()"""
 
-    return maxima
+    return maxima, G, median_width
 
 
 
@@ -1059,12 +1062,13 @@ def get_synapse_using_graph(image):
     worm_mask = worm_segmentation(img)
 
     if is_a_roll_worm(worm_mask):
-        return []
+        print("Image is a roll worm. Skipping...")
+        return [], [], 0
     else:
         # Get the synapses graph to get only the synapses
-        maxima = get_synapses_graph(worm_mask, local_max)
+        maxima, G, median_width = get_synapses_graph(worm_mask, local_max)
         maxima = list(map(tuple, maxima))   
-        return maxima
+        return maxima, G, median_width
     
 def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
@@ -1118,6 +1122,8 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
     X_derivative_intensity = np.zeros((len(X), MAX_LENGTH_OF_FEATURES), dtype=np.float64)
     maxima_coords = [None] * len(X)
     mask_synapses = [None] * len(X)
+    Graphs = [None] * len(X)
+    median_width = [None] * len(X)
     
     
     for im_num, image in enumerate(X):
@@ -1134,7 +1140,7 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
             X_intensity[im_num], X_derivative_intensity[im_num], maxima_coords[im_num] = get_high_intensity_pixels(mask_synapses[im_num], image)
         elif method == 2:
             try:
-                maxima_coords[im_num] = get_synapse_using_graph(original_image)
+                maxima_coords[im_num], Graphs[im_num], median_width[im_num] = get_synapse_using_graph(original_image)
                     
                 # creat a mask with disk of radius 5 around each maxima
                 mask_synapses[im_num] = np.zeros_like(image)
@@ -1192,5 +1198,5 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
     
     # return le dictionnaire ? 
     
-    return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses
+    return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses, Graphs, median_width
 

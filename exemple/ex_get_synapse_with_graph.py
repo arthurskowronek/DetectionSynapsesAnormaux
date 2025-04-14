@@ -1,5 +1,6 @@
 import os
 import skan
+import random
 import numpy as np
 import networkx as nx
 import matplotlib.cm as cm
@@ -117,14 +118,14 @@ def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1)
         angle_junctions = [maxima_coords[i] for i in angle_junctions]
 
     # Plotting the skeleton with endpoints and junctions
-    """plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 8))
     plt.imshow(skel, cmap='gray')
     for y, x in endpoints:
         plt.scatter(x, y, color='red', s=10)
     for y, x in angle_junctions:
         plt.scatter(x, y, color='blue', s=10)
     plt.title("Endpoints and Junctions") 
-    plt.show()"""
+    plt.show()
 
     # Initiate variables for pathfinding
     all_paths = {}
@@ -238,13 +239,13 @@ def skeleton_keep_main_branch(G, skel, maxima_coords, skeletonize=False, keep=1)
 
     # Plot selected paths
     flat_points = [pt for path in selected_paths for pt in path]
-    """plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 8))
     plt.imshow(skel, cmap='gray')
     for path in selected_paths:
         y, x = zip(*path)
         plt.plot(x, y, color='red', linewidth=2)
     plt.title("Selected Paths")
-    plt.show()"""
+    plt.show()
 
     # Create binary image of the main branch
     main_branch = np.zeros_like(skel, dtype=bool)
@@ -361,9 +362,9 @@ def worm_segmentation(img):
     
     
     # plot cleaned mask
-    """plt.imshow(worm_mask, cmap='gray')
-    plt.title('Cleaned Mask')
-    plt.show()"""
+    plt.imshow(worm_mask, cmap='gray')
+    plt.title('Segmentation of the worm')
+    plt.show()
     
     
     return worm_mask
@@ -499,9 +500,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     seg_len = n // NUMBER_OF_SEGMENTS
     centers = [skel_path[i * seg_len + seg_len // 2] for i in range(NUMBER_OF_SEGMENTS)]
 
-    # 4. KMeans classification of maxima by center points
-    #kmeans = KMeans(n_clusters=NUMBER_OF_SEGMENTS, init=np.array(centers), n_init=1, max_iter=1)
-    #labels = kmeans.fit_predict(maxima_coords)
+    # 4. Classification of maxima by center points
     # Compute distance between every maxima and every center
     distances = cdist(maxima_coords, centers)
     # Assign each point to the nearest center
@@ -536,7 +535,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
         directions.append(vec)
         
     # show on the image directions of the segments
-    """plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
     for i in range(NUMBER_OF_SEGMENTS):
         start = skel_path[i * seg_len]
@@ -544,7 +543,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
         plt.arrow(start[1], start[0], (end[1] - start[1]), (end[0] - start[0]), 
                   head_width=2, head_length=5, fc='red', ec='red')
     plt.title("Segment Directions")
-    plt.show()"""
+    plt.show()
     
     # put a black pixel
     worm_mask[0, :] = 0  # Top row
@@ -702,7 +701,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     #print("Number of cords:", NUMBER_OF_CORDS)
 
     # 6. Plot maxima with their assigned slice
-    """plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
     # Create a colormap for the 6 label categories
     cmap = cm.get_cmap('tab10')  # tab10 is good for up to 10 categories
@@ -712,7 +711,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.scatter([x[1] for x in maxima_coords], [x[0] for x in maxima_coords],
                 c=node_colors, s=10, alpha=1)
     plt.title("Maxima with Assigned Slices")
-    plt.show()"""
+    plt.show()
     
 
                
@@ -776,12 +775,12 @@ def get_synapses_graph(worm_mask, maxima_coords):
     #print("Number of nodes in the graph:", len(G.nodes))
     #print("Lenght of maxima_coords:", len(maxima_coords))
     # 8. Plot graph
-    """plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
     pos = {i: (x[1], x[0]) for i, x in enumerate(maxima_coords)}
     nx.draw(G, pos, node_size=1, node_color='red', edge_color='blue')
     plt.title("Directional Graph of Maxima")
-    plt.show()"""
+    plt.show()
     
     # 9. Convert graph to skeleton
     node_to_coord = {i: tuple(coord) for i, coord in enumerate(maxima_coords)}
@@ -798,23 +797,21 @@ def get_synapses_graph(worm_mask, maxima_coords):
     G, skeleton = skeleton_keep_main_branch(G, skeleton, maxima_coords, skeletonize = False, keep=NUMBER_OF_CORDS)
     
     # 11. Plot the skeleton
-    """plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 8))
     plt.imshow(skeleton, cmap='gray')
     plt.title(f"Skeleton of Worm ({NUMBER_OF_CORDS} Branches)")
-    plt.show() """   
+    plt.show()   
     
     # keep only nodes that are in skeleton
     maxima = np.array([node for node in maxima_coords if skeleton[node[0], node[1]] == 1])
         
     #print("Number of nodes in the final graph:", len(maxima))
     # plot image with maxima_filtered
-    """plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
     plt.scatter(maxima[:, 1], maxima[:, 0], s=1, color='red')
-    #for i in range(len(nodes)):
-        #plt.scatter(nodes[i][1], nodes[i][0], s=1, color='red')
     plt.title("Maxima Coordinates")
-    plt.show()"""
+    plt.show()
 
     return maxima
 
@@ -822,16 +819,20 @@ def get_synapses_graph(worm_mask, maxima_coords):
 # Example usage
 if __name__ == "__main__":
     # image_path is a random image of the directory "data/WildType 2023_12_22"
-    path_directory = "data/WildType 2023_12_22"
-    path_directory = "data/Mut0 2023_12_22"
-    list_of_images = os.listdir(path_directory)
-    
-    for image in list_of_images:   
-        #image = "EN6028-10_MMStack.ome.tif"
-        #image = "EN6024-03_MMStack.ome.tif"   
-        #image = "EN6017-13_MMStack.ome.tif" 
-        #image = "EN6017-05_MMStack.ome.tif" 
-        image_path = os.path.join(path_directory, image)
+    path_directory_WT = "data/WildType 2023_12_22"
+    path_directory_Mut = "data/Mut0 2023_12_22"
+    list_of_images_WT = os.listdir(path_directory_WT)
+    list_of_images_Mut = os.listdir(path_directory_Mut)
+
+    # Store images with their source directory
+    image_data = [(img, path_directory_WT) for img in list_of_images_WT] + \
+                [(img, path_directory_Mut) for img in list_of_images_Mut]
+    # Shuffle the combined list
+    random.shuffle(image_data)
+
+    # Process each image with its correct path
+    for image, source_dir in image_data:
+        image_path = os.path.join(source_dir, image)
         print(f"---------- Processing {image_path} ----------")
             
       

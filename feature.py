@@ -1,15 +1,12 @@
 import scipy
 import joblib
 import pyfeats
-import pointpats
 import numpy as np
 import pandas as pd
 import skimage as ski
-from skimage.feature import graycomatrix, graycoprops, hog
 import matplotlib.pyplot as plt
 from pathlib import Path
 from boruta import BorutaPy  
-from scipy.signal import savgol_filter
 from scipy.spatial import distance_matrix
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LassoCV
@@ -23,271 +20,27 @@ from constants import *
 
 # ---------- Utility functions ----------
 
-def first_neighbor_distance_histogram(positions, bins):
-    """
-    Compute the histogram of the distance to first neighbor of the centroids.
-    
-    Parameters
-    ----------
-    positions : ndarray
-        Array of centroid positions.
-    bins : ndarray
-        Bins for histogram.
-        
-    Returns
-    -------
-    ndarray
-        Normalized histogram.
-    """
-    if len(positions) <= 1:
-        return np.zeros(len(bins)-1)
-        
-    min_dist = np.zeros(len(positions))
-    
-    for indx in range(len(positions)):
-        curr_pos = positions[indx, :]
-        sq_diff = np.square(np.array(positions) - curr_pos)
-        dist = np.sqrt(np.sum(sq_diff, axis=1))
-        dist = dist[dist > 0]
-        min_dist[indx] = dist.min() if len(dist) > 0 else 0
+def two_neighbors_distance_histogram(G, bins):
 
-    histo, _ = np.histogram(min_dist, bins)
-    sum_histo = np.sum(histo)
-    if sum_histo > 0:
-        return histo / sum_histo
-    return histo
-
-def compute_zernike_features(roi_mask, radius=10):
-    """
-    Compute Zernike moments from a binary ROI.
+    # Compute the distance matrix
+    dist_matrix = distance_matrix(G.nodes, G.nodes)
     
-    Parameters
-    ----------
-    roi_mask : ndarray
-        Binary mask of the ROI.
-    degree : int
-        Degree for Zernike moments.
-    radius : int
-        Radius parameter.
-        
-    Returns
-    -------
-    ndarray
-        Zernike moments vector.
-    """
-    # The library function expects the ROI and parameters as given
-    # (Assumes that the ROI is centered and the radius is appropriate.)
-    roi_mask = roi_mask.astype(np.float32)
-    zernike =  pyfeats.zernikes_moments(roi_mask, radius=radius)
-    return zernike[0]
-
-def compute_hu_features(roi_mask):
-    roi_mask = roi_mask.astype(np.float32)
-    hu = pyfeats.hu_moments(roi_mask)
-    return hu[0]
-
-def compute_hog_features(roi_intensity, pixels_per_cell=(2, 2), cells_per_block=(2, 2), orientations=9):
-    """
-    Compute HOG (Histogram of Oriented Gradients) features for an ROI.
+    # Get the distances of neighboring nodes
+    neighbor_distances = []
+    for node in G.nodes:
+        neighbors = list(G.neighbors(node))
+        for neighbor in neighbors:
+            if node != neighbor:
+                neighbor_distances.append(dist_matrix[node, neighbor])
+                
+    # Compute the histogram
+    hist, _ = np.histogram(neighbor_distances, bins=bins)
     
-    Parameters
-    ----------
-    roi_intensity : ndarray
-        Intensity image of the ROI.
-    pixels_per_cell : tuple of int
-        Size of a cell.
-    cells_per_block : tuple of int
-        Block size.
-    orientations : int
-        Number of orientation bins.
-        
-    Returns
-    -------
-    ndarray
-        HOG feature vector.
-    """
-    # Resize ROI to a fixed size for uniformity (e.g., 12x12)
-    roi_resized = ski.transform.resize(roi_intensity, (12, 12), anti_aliasing=True)
-    hog_desc = hog(roi_resized, orientations=orientations, pixels_per_cell=pixels_per_cell,
-                   cells_per_block=cells_per_block, feature_vector=True)
-    return hog_desc
-
-def compute_ripley_k(centroid_positions, support=50):
-    """
-    Compute Ripley's K-function for the given centroid positions.
-    
-    Parameters
-    ----------
-    centroid_positions : ndarray
-        Array of (row, col) coordinates.
-    support : float
-        Distance at which to evaluate K.
-        
-    Returns
-    -------
-    float
-        Ripley K-function value at the support distance.
-    """
-    if len(centroid_positions) < 2:
-        return 0.0
-    # Unpack the tuple returned by RipleyK: (radii, k_values)
-    radii, k_values = pointpats.k(centroid_positions, support=support)
-    # Get the K-value at the maximum support (or use an alternative aggregation)
-    K_value = k_values[-1]
-    return K_value
-
-def rms_roughness(curve, window_length=11, polyorder=2):
-    """Calculates the RMS roughness of a 1D curve (intensity values)."""
-    curve = np.array(curve)
-    # Smooth the curve using Savitzky-Golay filter
-    smoothed_curve = savgol_filter(curve, window_length, polyorder)
-    # Calculate the deviations
-    deviations = curve - smoothed_curve
-    # Calculate the RMS roughness
-    roughness = np.sqrt(np.mean(deviations**2))
-    return roughness
-
-def calculate_glcm_features(image, distances=[1], angles=[0]):
-    """
-    Calculate multiple GLCM texture features for an image
-    
-    Parameters:
-    -----------
-    image : numpy.ndarray
-        Input image (grayscale)
-    distances : list, optional
-        List of pixel pair distances
-    angles : list, optional
-        List of angles to consider
-    
-    Returns:
-    --------
-    dict
-        Dictionary of GLCM texture features
-    """
-    # Ensure image is 2D and has appropriate data type
-    image = np.atleast_2d(image).astype(np.uint8)
-    
-    # Handle empty or zero-sized images
-    if image.size == 0:
-        return {
-            'contrast': 0,
-            'dissimilarity': 0,
-            'homogeneity': 0,
-            'energy': 0,
-            'correlation': 0
-        }
-    
-    # Normalize image to 8-bit range if needed
-    image = ((image - image.min()) / (image.max() - image.min()) * 255).astype(np.uint8)
-    
-    # Compute GLCM
-    glcm = graycomatrix(
-        image, 
-        distances=distances, 
-        angles=angles, 
-        levels=256,  # Full 8-bit range
-        symmetric=True,  # Symmetric to capture all directions
-        normed=True  # Normalize the matrix
-    )
-    
-    # Calculate features
-    features = {
-        'contrast': graycoprops(glcm, 'contrast')[0, 0],
-        'dissimilarity': graycoprops(glcm, 'dissimilarity')[0, 0],
-        'homogeneity': graycoprops(glcm, 'homogeneity')[0, 0],
-        'energy': graycoprops(glcm, 'energy')[0, 0],
-        'correlation': graycoprops(glcm, 'correlation')[0, 0]
-    }
-    
-    return features
-
-def calculate_glds_features(image):
-    """
-    Calculate Gray Level Difference Statistics (GLDS) features for an image.
-    
-    Parameters:
-    -----------
-    image : numpy.ndarray
-        Input image (grayscale)
-    
-    Returns:
-    --------
-    dict
-        Dictionary of GLDS features
-    """
-    # Ensure image is 2D and has appropriate data type
-    #image = np.atleast_2d(image).astype(np.uint8)
-    
-    # Handle empty or zero-sized images
-    if image.size == 0:
-        return {
-            'contrast': 0,
-            'entropy': 0,
-            'homogeneity': 0,
-            'energy': 0,
-            'mean': 0
-        }
-    
-    # Normalize image to 8-bit range if needed
-    #image = ((image - image.min()) / (image.max() - image.min()) * 255).astype(np.uint8)
-    
-    # Compute GLDS features
-    glds = pyfeats.glds_features(image, mask=None)
-    
-    features = {
-        'contrast': glds[0],
-        'entropy': glds[1],
-        'homogeneity': glds[2],
-        'energy': glds[3],
-        'mean': glds[4]
-    }
-    
-    return features
-
-def calculate_ngtdm_features(image):
-    """
-    Calculate Neighborhood Gray Tone Difference Matrix (NGTDM) features for an image.
-    
-    Parameters:
-    -----------
-    image : numpy.ndarray
-        Input image (grayscale)
-    
-    Returns:
-    --------
-    dict
-        Dictionary of NGTDM features
-    """
-    # Ensure image is 2D and has appropriate data type
-    #image = np.atleast_2d(image).astype(np.uint8)
-    
-    # Handle empty or zero-sized images
-    if image.size == 0:
-        return {
-            'coarseness': 0,
-            'contrast': 0,
-            'busyness': 0,
-            'complexity': 0,
-            'strength': 0
-        }
-    
-    # Compute NGTDM features
-    ngtdm = pyfeats.ngtdm_features(image)
-    
-    features = {
-        'coarseness': ngtdm[0],
-        'contrast': ngtdm[1],
-        'busyness': ngtdm[2],
-        'complexity': ngtdm[3],
-        'strength': ngtdm[4]
-    }
-    
-    return features
+    return hist
 
 # ---------- Feature extraction ----------
 
-def create_feature_vector(image, component_props, intensity=None, n_bins=20,
+def create_feature_vector(G, mean_intensity, median_width, image, component_props, intensity=None, n_bins=20,
                          include_texture=True, include_morphological=True,
                          include_histogram=True, include_multiscale=True,
                          include_other=True, verbose_warning=False):
@@ -390,6 +143,9 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
         minr, minc, maxr, maxc = prop.bbox
         roi_mask = prop.image  # binary mask of the region
         roi_intensity = image[minr:maxr, minc:maxc]  # intensity values
+        # subtract the mean intensity from the ROI
+        roi_intensity = roi_intensity - mean_intensity 
+        roi_intensity = np.clip(roi_intensity, 0, None)  # Ensure non-negative values
         
         # Create dictionary to store features for this component
         roi_features = {}
@@ -545,6 +301,8 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
                     features, name = pyfeats.shape_parameters(
                         roi_intensity, roi_mask, perimeter, pixels_per_mm2=1)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                    if median_width != 0:
+                        features = features / median_width
                     # Ensure correct dimension
                     if len(features) != expected_dimensions['A_Shape_Parameters']:
                         if verbose_warning:
@@ -1005,520 +763,43 @@ def create_feature_vector(image, component_props, intensity=None, n_bins=20,
             print(f"Warning: Error computing spatial distribution features: {e}")
         feat_vector.extend(np.zeros(9))  # Placeholder for spatial features
     
+    # add the two_neighbors_distance_histogram function
+    try:
+        # Compute the two-neighbors distance histogram
+        two_neighbors_distance_histogram = two_neighbors_distance_histogram(G, N_BINS_FEAT)
+        feat_vector.extend(two_neighbors_distance_histogram)
+    except Exception as e:
+        if verbose_warning:
+            print(f"Warning: Error computing two-neighbors distance histogram: {e}")
+        feat_vector.extend(np.zeros(N_BINS_FEAT))  # Placeholder for histogram features
+        
+    # compute the mean, max, median, min distance of edges in G
+    try:
+        # Compute the length of all edges in G
+        edge_lengths = []
+        for u, v in G.edges():
+            length = np.linalg.norm(np.array(G.nodes[u]['centroid']) - np.array(G.nodes[v]['centroid']))
+            edge_lengths.append(length)
+        edge_lengths = np.array(edge_lengths)
+        # Compute statistics
+        mean_distance = np.mean(edge_lengths)
+        max_distance = np.max(edge_lengths)
+        median_distance = np.median(edge_lengths)
+        min_distance = np.min(edge_lengths)
+        feat_vector.extend([mean_distance, max_distance, median_distance, min_distance])
+        
+    except Exception as e:
+        if verbose_warning:
+            print(f"Warning: Error computing mean distance: {e}")
+        feat_vector.extend(np.zeros(4))  # Placeholder for distance features
+    
+    
     # Convert feat_vector to numpy array and check for NaNs or infinities
     feat_vector = np.array(feat_vector, dtype=np.float64)
     feat_vector = np.nan_to_num(feat_vector, nan=0.0, posinf=0.0, neginf=0.0)
     
     # Return the final feature vector as a numpy array
     return feat_vector
-
-
-
-def create_feature_vector2(image, component_props, intensity=None, n_bins=20,
-                         include_texture=True, include_morphological=True,
-                         include_histogram=True, include_multiscale=True,
-                         include_other=True, verbose_warning=False):
-    """
-    Create a comprehensive feature vector from a preprocessed image.
-    
-    The feature vector includes:
-      - Texture features (FOS, GLCM, GLDS, NGTDM, SFM, LTE, FDTA, GLRLM, FPS, Shape, HOS, LBP, GLSZM)
-      - Morphological features (Grayscale, Binary)
-      - Histogram-based features (Histogram, MultiregionHistogram, Correlogram)
-      - Multi-scale features (DWT, SWT, WP, GT, AMFM)
-      - Other features (HOG, Hu Moments, TAS, Zernikes Moments)
-    
-    Parameters
-    ----------
-    image : ndarray
-        Preprocessed intensity image.
-    component_props : list
-        List of region properties (from skimage.measure.regionprops).
-    intensity : ndarray, optional
-        Intensity image, if different from the image used for segmentation.
-    n_bins : int, default=20
-        Number of bins for histograms.
-    include_texture : bool, default=True
-        Whether to include texture features.
-    include_morphological : bool, default=True
-        Whether to include morphological features.
-    include_histogram : bool, default=True
-        Whether to include histogram-based features.
-    include_multiscale : bool, default=True
-        Whether to include multi-scale features.
-    include_other : bool, default=True
-        Whether to include other features (HOG, Hu Moments, etc.).
-        
-    Returns
-    -------
-    ndarray
-        Comprehensive feature vector.
-    """
-    # Initialize empty feature vector
-    feat_vector = []
-
-    if not component_props:
-        print("Warning: No components found in image.")
-        # Return an empty feature vector
-        return np.array([0])
-    
-    # Always include number of detected components
-    num_components = len(component_props)
-    feat_vector = [num_components]
-    
-    # Get intensity image if not provided
-    if intensity is None:
-        intensity = image
-    
-    # For component-based processing, we'll compute features for each component
-    # and then aggregate them (mean, std, etc.)
-    component_features = []
-    
-    for prop in component_props:
-        # Extract ROI using bounding box from regionprops
-        minr, minc, maxr, maxc = prop.bbox
-        roi_mask = prop.image  # binary mask of the region
-        roi_intensity = image[minr:maxr, minc:maxc]  # intensity values
-        
-        # Create dictionary to store features for this component
-        roi_features = {}
-        
-        # ---------- A. Texture Features ----------
-        if include_texture:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")  # Ignore tous les warnings à l'intérieur du bloc
-                try:
-                    # First Order Statistics
-                    features, name = pyfeats.fos(roi_intensity, roi_mask)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_FOS'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing FOS features: {e}")
-                    roi_features['A_FOS'] = np.zeros(16)
-                    
-                try:    
-                    # Gray Level Co-occurrence Matrix
-                    features, name = pyfeats.glcm_features(roi_intensity, ignore_zeros=True)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_GLCM'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing GLCM features: {e}")
-                    roi_features['A_GLCM'] = np.zeros(13)
-                    
-                try:     
-                    # Gray Level Difference Statistics
-                    features, name = pyfeats.glds_features(roi_intensity, roi_mask, 
-                                                                Dx=[0,1,1,1], Dy=[1,1,0,-1])
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_GLDS'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing GLDS features: {e}")
-                    roi_features['A_GLDS'] = np.zeros(5)
-                    
-                try:     
-                    # Neighborhood Gray Tone Difference Matrix
-                    features, name = pyfeats.ngtdm_features(roi_intensity, roi_mask, d=1)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_NGTDM'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing NGTDM features: {e}")
-                    roi_features['A_NGTDM'] = np.zeros(5)
-                    
-                try:     
-                    # Statistical Feature Matrix
-                    features, name = pyfeats.sfm_features(roi_intensity, roi_mask, Lr=4, Lc=4)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_SFM'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing SFM features: {e}")
-                    roi_features['A_SFM'] = np.zeros(4)
-                    
-                try:     
-                    # Laws Texture Energy
-                    features, name = pyfeats.lte_measures(roi_intensity, roi_mask, l=7)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_LTE'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing LTE features: {e}")
-                    roi_features['A_LTE'] = np.zeros(6)
-                    
-                try:     
-                    # Fractal Dimension Texture Analysis
-                    features, name = pyfeats.fdta(roi_intensity, roi_mask, s=3)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_FDTA'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing FDTA features: {e}")
-                    roi_features['A_FDTA'] = np.zeros(4)
-                    
-                try:     
-                    # Gray Level Run Length Matrix
-                    features, name = pyfeats.glrlm_features(roi_intensity, roi_mask, Ng=256)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_GLRLM'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing GLRLM features: {e}")
-                    roi_features['A_GLRLM'] = np.zeros(11)
-                    
-                try:     
-                    # Fourier Power Spectrum
-                    features, name = pyfeats.fps(roi_intensity, roi_mask)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_FPS'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing FPS features: {e}")
-                    roi_features['A_FPS'] = np.zeros(2)
-                    
-                try:     
-                    # Shape Parameters
-                    # Calculate perimeter first
-                    perimeter = prop.perimeter
-                    features, name = pyfeats.shape_parameters(
-                        roi_intensity, roi_mask, perimeter, pixels_per_mm2=1)
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_Shape_Parameters'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing shape parameters features: {e}")
-                    roi_features['A_Shape_Parameters'] = np.zeros(5)
-                    
-                try:     
-                    # Higher Order Spectra
-                    # Using adaptive thresholds based on intensity range
-                    intensity_min = np.min(roi_intensity)
-                    intensity_max = np.max(roi_intensity)
-                    th_low = intensity_min + 0.4 * (intensity_max - intensity_min)
-                    th_high = intensity_min + 0.6 * (intensity_max - intensity_min)
-                    features, name = pyfeats.hos_features(roi_intensity, th=[th_low, th_high])
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_HOS'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing HOS features: {e}")
-                    roi_features['A_HOS'] = np.zeros(2)
-                    
-                try:     
-                    # Local Binary Patterns
-                    roi_int_uint8 = (roi_intensity * 255 / roi_intensity.max()).astype(np.uint8)
-                    features, name = pyfeats.lbp_features(roi_int_uint8, roi_int_uint8, 
-                                                                P=[8,16,24], R=[1,2,3]) 
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_LBP'] = features
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing LPB features: {e}")
-                    roi_features['A_LBP'] = np.zeros(6)
-                    
-                try:     
-                    # Gray Level Size Zone Matrix
-                    features, name = pyfeats.glszm_features(roi_intensity, roi_mask) 
-                    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    roi_features['A_GLSZM'] = features  
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing GLSZM features: {e}")
-                    roi_features['A_GLSZM'] = np.zeros(14)
-            
-        # ---------- B. Morphological Features ---------- 
-        if include_morphological:
-            try:
-                # Grayscale Morphology
-                roi_features['B_Morphological_Grayscale_pdf'], roi_features['B_Morphological_Grayscale_cdf'] = \
-                    pyfeats.grayscale_morphology_features(roi_intensity, N=30)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing morphological grayscale features: {e}")
-                roi_features['B_Morphological_Grayscale_pdf'] = np.zeros(30)
-                roi_features['B_Morphological_Grayscale_cdf'] = np.zeros(30)
-
-            # Désactiver temporairement les RuntimeWarnings ici
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-                try:    
-                    # Multi-level Binary Morphology
-                    intensity_min = np.min(roi_intensity)
-                    intensity_max = np.max(roi_intensity)
-                    th_low = intensity_min + 0.25 * (intensity_max - intensity_min)
-                    th_high = intensity_min + 0.5 * (intensity_max - intensity_min)
-
-                    roi_features['B_Morphological_Binary_L_pdf'], roi_features['B_Morphological_Binary_M_pdf'], \
-                    roi_features['B_Morphological_Binary_H_pdf'], roi_features['B_Morphological_Binary_L_cdf'], \
-                    roi_features['B_Morphological_Binary_M_cdf'], roi_features['B_Morphological_Binary_H_cdf'] = \
-                        pyfeats.multilevel_binary_morphology_features(
-                            roi_intensity, roi_mask, N=30, thresholds=[th_low, th_high])
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing morphological Binary features: {e}")
-                    roi_features['B_Morphological_Binary_L_pdf'] = np.zeros(30)
-                    roi_features['B_Morphological_Binary_M_pdf'] = np.zeros(30)
-                    roi_features['B_Morphological_Binary_H_pdf'] = np.zeros(30)
-                    roi_features['B_Morphological_Binary_L_cdf'] = np.zeros(30)
-                    roi_features['B_Morphological_Binary_M_cdf'] = np.zeros(30)
-                    roi_features['B_Morphological_Binary_H_cdf'] = np.zeros(30)
-                    
-        # ---------- C. Histogram-based Features ---------- 
-        if include_histogram:
-            try:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    roi_features['C_Histogram'] = pyfeats.histogram(roi_intensity, roi_mask, bins=32)
-                roi_features['C_Histogram'] = roi_features['C_Histogram'].astype(float)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing C histogram features: {e}")
-                roi_features['C_Histogram'] = np.zeros(32, dtype=float)
-                        
-            try:    
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    roi_features['C_MultiregionHistogram'] = pyfeats.multiregion_histogram(
-                        roi_intensity, roi_mask, bins=32, num_eros=3, square_size=3)
-                roi_features['C_MultiregionHistogram'] = roi_features['C_MultiregionHistogram'].astype(float)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing C MultiregionHistogram features: {e}")
-                roi_features['C_MultiregionHistogram'] = np.zeros(32 * 4, dtype=float)
-                
-            try:    
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    roi_features['C_Correlogram'] = pyfeats.correlogram(
-                        roi_intensity, roi_mask, bins_digitize=32, bins_hist=32, flatten=True) 
-                roi_features['C_Correlogram'] = roi_features['C_Correlogram'].astype(float)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing C Correlogram features: {e}")
-                roi_features['C_Correlogram'] = np.zeros(32 * 32, dtype=float)
-        
-        # ---------- D. Multi-scale Features ---------- 
-        if include_multiscale:
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning)
-                try:
-                    # Discrete Wavelet Transform
-                    roi_features['D_DWT'] = np.array(pyfeats.dwt_features(roi_intensity, roi_mask, wavelet='bior3.3', levels=3),dtype=float)
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing multi-scale D_DWT features: {e}")
-                    roi_features['D_DWT'] = np.zeros(7 * 3 * 4, dtype=float)  # 7 stats, 3 levels, 4 subbands
-
-                try:
-                    # Stationary Wavelet Transform
-                    roi_features['D_SWT'] = np.array(pyfeats.swt_features(roi_intensity, roi_mask, wavelet='bior3.3', levels=3), dtype=float)
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing multi-scale D_SWT features: {e}")
-                    roi_features['D_SWT'] = np.zeros(7 * 3 * 4, dtype=float)
-
-                try:
-                    # Wavelet Packet
-                    roi_features['D_WP'] = np.array(pyfeats.wp_features(roi_intensity, roi_mask, wavelet='coif1', maxlevel=3),dtype=float)
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing multi-scale D_WP features: {e}")
-                    roi_features['D_WP'] = np.zeros(7 * (4**3), dtype=float)  # 4^3 = 64
-
-                try:
-                    # Gabor Transform
-                    roi_features['D_GT'] = np.array(pyfeats.gt_features(roi_intensity, roi_mask),dtype=float)
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing multi-scale D_GT features: {e}")
-                    roi_features['D_GT'] = np.zeros(7 * 4 * 6, dtype=float)  # 7 stats, 4 scales, 6 orientations
-
-                try:
-                    # Amplitude-Modulation Frequency-Modulation
-                    roi_features['D_AMFM'] = np.array(pyfeats.amfm_features(roi_intensity),dtype=float)
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: Error computing multi-scale D_AMFM features: {e}")
-                    roi_features['D_AMFM'] = np.zeros(12, dtype=float)  # AMFM feature dimension
-
-        # ---------- E. Other Features ----------
-        if include_other:
-            try:
-                # HOG Features
-                roi_features['E_HOG'] = pyfeats.hog_features(roi_intensity, ppc=8, cpb=3)
-                # Ensure the result is a numeric array (in case it's returned as something unexpected)
-                roi_features['E_HOG'] = np.array(roi_features['E_HOG'], dtype=np.float64)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing HOG features: {e}")
-                roi_features['E_HOG'] = np.zeros(36, dtype=np.float64)  # HOG feature dimension
-
-            try:
-                # Hu Moments
-                roi_features['E_HuMoments'] = pyfeats.hu_moments(roi_intensity)
-                # Ensure the result is a numeric array
-                roi_features['E_HuMoments'] = np.array(roi_features['E_HuMoments'], dtype=np.float64)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing HU features: {e}")
-                roi_features['E_HuMoments'] = np.zeros(7, dtype=np.float64)  # 7 Hu moments
-
-            try:
-                # Threshold Adjacency Statistics
-                roi_features['E_TAS'] = pyfeats.tas_features(roi_intensity)
-                # Ensure the result is a numeric array
-                roi_features['E_TAS'] = np.array(roi_features['E_TAS'], dtype=np.float64)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing TAS features: {e}")
-                roi_features['E_TAS'] = np.zeros(9, dtype=np.float64)  # TAS feature dimension
-
-            try:
-                # Zernike Moments
-                # Determine appropriate radius based on ROI size
-                min_dim = min(roi_intensity.shape)
-                radius = min(9, min_dim // 2)  # Use smaller of 9 or half the minimum dimension
-                roi_features['E_ZernikesMoments'] = pyfeats.zernikes_moments(
-                    roi_intensity, radius=radius)
-                # Ensure the result is a numeric array
-                roi_features['E_ZernikesMoments'] = np.array(roi_features['E_ZernikesMoments'], dtype=np.float64)
-            except Exception as e:
-                if verbose_warning:
-                    print(f"Warning: Error computing Zernike features: {e}")
-                roi_features['E_ZernikesMoments'] = np.zeros(25, dtype=np.float64)  # Zernike moments up to order 9
-        
-        """print("---------- Extracted features for component -----------")
-        # print dictionnary roi_features in a nice format
-        for key, value in roi_features.items():
-            print(f"{key}: {value}")
-        print("-------------------------------------------------------")"""
-        
-        # Add this component's features to the list
-        component_features.append(roi_features)
-            
-    # ---------- Aggregate component features ----------
-    # For each feature type, compute mean, std, min, max across all components
-    if component_features:
-        aggregated_features = {}
-        
-        # List all feature keys from the first component
-        feature_keys = component_features[0].keys()
-        
-        for key in feature_keys:
-            # Stack this feature from all components
-            stacked_feature = np.vstack([comp[key] for comp in component_features 
-                                         if comp[key] is not None and len(comp[key]) > 0])
-            
-            if stacked_feature.size > 0:
-                # Compute statistics
-                mean_feature = np.mean(stacked_feature, axis=0)
-                std_feature = np.std(stacked_feature, axis=0)
-                min_feature = np.min(stacked_feature, axis=0)
-                max_feature = np.max(stacked_feature, axis=0)
-                
-                # Append to feature vector
-                feat_vector.extend(mean_feature)
-                feat_vector.extend(std_feature)
-                # Only include min/max for key features to control vector length, no need for other features
-                if key.startswith(('A_FOS', 'A_GLCM', 'A_NGTDM', 'E_HuMoments')):
-                    feat_vector.extend(min_feature)
-                    feat_vector.extend(max_feature)
-    
-    # Add spatial distribution features
-    try:
-        # Compute centroid positions and Ripley's K function
-        centroid_positions = np.array([prop.centroid for prop in component_props])
-        if len(centroid_positions) > 1:
-            # Compute nearest neighbor distances
-            dist_matrix = distance_matrix(centroid_positions, centroid_positions)
-            np.fill_diagonal(dist_matrix, np.inf)  # Ignore self-distances
-            nearest_neighbor_dists = np.min(dist_matrix, axis=1)
-            
-            # Calculate statistics of distances
-            mean_nn_dist = np.mean(nearest_neighbor_dists)
-            std_nn_dist = np.std(nearest_neighbor_dists)
-            min_nn_dist = np.min(nearest_neighbor_dists)
-            max_nn_dist = np.max(nearest_neighbor_dists)
-            
-            # Add to feature vector
-            feat_vector.extend([mean_nn_dist, std_nn_dist, min_nn_dist, max_nn_dist])
-            
-            # Try to compute Ripley's K if pointpats is available
-            try:
-                max_dist = np.max(nearest_neighbor_dists) * 2
-                radii = np.linspace(0, max_dist, 5)
-                ripley_k_values = []
-                
-                for r in radii:
-                    if r > 0:
-                        count = np.sum(dist_matrix < r, axis=1)
-                        k_r = np.mean(count) / (len(centroid_positions) - 1)
-                        ripley_k_values.append(k_r)
-                
-                feat_vector.extend(ripley_k_values)
-            except Exception as e:
-                print(f"Warning: Error computing Ripley's K: {e}")
-                feat_vector.extend(np.zeros(5))  # Placeholder for Ripley's K
-        else:
-            # Add zeros for spatial features if too few components
-            feat_vector.extend(np.zeros(9))  # 4 for NN distances, 5 for Ripley's K
-    except Exception as e:
-        print(f"Warning: Error computing spatial distribution features: {e}")
-        feat_vector.extend(np.zeros(9))  # Placeholder for spatial features
-    
-    
-    # Return the final feature vector as a numpy array
-    return np.array(feat_vector)
-
-def get_synapse_centers_using_hessian(region, image, sigma=2):
-    """
-    Detects synapse centers in a region using the Hessian matrix.
-    
-    Parameters:
-    - region: Binary mask of the region.
-    - image: Original grayscale image.
-    - sigma: Scale for Hessian filter.
-    
-    Returns:
-    - List of (x, y) coordinates for synapse centers.
-    """
-    # Compute Hessian matrix of the region
-    hessian_elems = ski.feature.hessian_matrix(image, sigma=sigma, order='rc')
-    hessian_eigenvals = ski.feature.hessian_matrix_eigvals(hessian_elems)
-    
-    # Step 2: Threshold negative eigenvalues
-    eigenvalue1, eigenvalue2 = hessian_eigenvals[0], hessian_eigenvals[1]
-        
-    # Keep points where both eigenvalues are negative
-    negative_eigenvalue_mask = (eigenvalue1 < 0) & (eigenvalue2 < 0)
-        
-    # Step 3: Find local maxima in the negative eigenvalue mask (intensity peaks)
-    hessian_response = np.abs(eigenvalue1)  # or use the largest eigenvalue for intensity peaks
-    local_maxima = ski.feature.peak_local_max(hessian_response, min_distance=3, exclude_border=False)
-        
-    # Step 4: Filter maxima based on the mask and thresholding condition
-    synapse_centers = [(x, y) for x, y in local_maxima if region[x, y] > 0 and negative_eigenvalue_mask[x, y]]
-    
-    # Plot original vs. Hessian response
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].imshow(image, cmap='gray')
-    axes[0].set_title('Original Image')
-    axes[1].imshow(hessian_response, cmap='inferno')
-    axes[1].set_title('Hessian Response')
-    plt.show()
-        
-
-    fig, ax = plt.subplots(figsize=(6, 6))
-    ax.imshow(image, cmap='gray')
-    ax.scatter([y for x, y in synapse_centers], [x for x, y in synapse_centers], 
-            color='red', s=20, label="Detected Centers")
-    ax.set_title("Synapse Centers Overlaid on Image")
-    ax.legend()
-    plt.show()
-    
-    return synapse_centers
 
 def get_regions_of_interest(coord, image_original, binary_mask):
     
@@ -1726,7 +1007,7 @@ def get_regions_of_interest(coord, image_original, binary_mask):
 
     return region_props, refined_segmented
 
-def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
+def get_feature_vector(G, median_width, X, y, X_orig, max_images, mask_images, intensity, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
     Create feature vectors from preprocessed images.
     
@@ -1788,14 +1069,16 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
             image_original = X_orig[im_num]
             maxima = max_images[im_num]
             mask = mask_images[im_num]
+            
+            # get mean intensity of background
+            mean_intensity = np.mean(image[mask == 0])
         
             component, label_seg = get_regions_of_interest(maxima, image_original, mask)
-            feat = create_feature_vector(image, component, intensity[im_num], n_bins, 
+            feat = create_feature_vector(G[im_num], mean_intensity, median_width[im_num], image, component, intensity[im_num], n_bins, 
                                          include_texture=True, include_morphological=True,
                                          include_histogram=True, include_multiscale=True,
                                          include_other=True)
-            
-            
+
             features['label'].append(y[im_num])
             features['data'].append(feat)
             features['filename'].append(f"image_{im_num}")
@@ -1803,6 +1086,14 @@ def get_feature_vector(X, y, X_orig, max_images, mask_images, intensity, recompu
             features['label_components'].append(label_seg)
             
             X_feat.append(feat)
+        
+        # compute number max of features in a row of X_feat
+        max_len = max(len(row) for row in X_feat)
+        
+        for i, row in enumerate(X_feat):
+            if len(row) == 1:
+                # add zeros to the row until it has max_len elements
+                X_feat[i] = np.zeros(max_len)
         
         X_feat = np.array(X_feat)
         print('Features computed.')
