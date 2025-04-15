@@ -8,8 +8,8 @@ from sklearn.decomposition import PCA
 
 def test_model_accuracy(model_types):
     # ---------- Load dataset ----------
-    filename_pkl_dataset = 'dataset_2025-04-04_11-35-21'
-    data = create_dataset(reimport_images=True, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False) #, pkl_name=filename_pkl_dataset + '.pkl')
+    filename_pkl_dataset = 'dataset_2025-04-15_10-17-39'
+    data = create_dataset(reimport_images=False, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Convert to numpy arrays
     X = np.array(data['data'])
@@ -23,11 +23,22 @@ def test_model_accuracy(model_types):
     X_copy = X.copy()
     
     # ---------- Preprocessing ----------
-    filename_pkl_dataset = 'dataset_2025-03-12_22-29-09_preprocessing_1'
-    X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
+    filename_pkl_dataset = 'dataset_2025-04-15_10-17-39_preprocessing_1'
+    X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width, Measure_diff_slice, Measure_diff_points_segment = get_preprocess_images(method=2, recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
-    X_features, features = get_feature_vector(G, median_width, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
+    X_features, features = get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
+    
+    # save features to a xlsx file
+    df = pd.DataFrame(X_features)
+    df.to_excel('features.xlsx', index=False)
+    
+    
+    # Detect indice of elements in X_feat which contain only 0s
+    indices = np.where(np.all(X_features == 0, axis=1))[0]
+    # Remove these elements from X_feat and y
+    X_features = np.delete(X_features, indices, axis=0)
+    y = np.delete(y, indices, axis=0)
     
     # ---------- Feature Reduction ----------
     # Scale features
@@ -60,18 +71,12 @@ def test_model_accuracy(model_types):
     
     # scale features
     scaler = StandardScaler()
-    #X_features = scaler.fit_transform(X_features)
+    X_features = scaler.fit_transform(X_features)
     
     # Here we choose the top k features 
-    #X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
+    X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
     
     number_features_after = X_features.shape[1]
-    
-    # Detect indice of elements in X_feat which contain only 0s
-    indices = np.where(np.all(X_features == 0, axis=1))[0]
-    # Remove these elements from X_feat and y
-    X_features = np.delete(X_features, indices, axis=0)
-    y = np.delete(y, indices, axis=0)
     
     # ---------- Test all models and generate a comprehensive report ----------
     results = {}
@@ -129,7 +134,7 @@ def test_pipeline():
     
     # ---------- Preprocessing ----------
     #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
+    X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width, Measure_diff_slice, Measure_diff_points_segment = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
     
     
     #X_hist = get_histogram_vector(X_preprocessed)
@@ -145,7 +150,7 @@ def test_pipeline():
         print(f'Image {i} done')"""
         
         
-    X_features, features = get_feature_vector(G, median_width, X_preprocessed, y, X, maxima, mask, intensity, recompute=True) # mask
+    X_features, features = get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X_preprocessed, y, X, maxima, mask, intensity, recompute=True) # mask
     # X_reduced = select_features(X_feat, y, method='lasso')
     
     
@@ -265,11 +270,11 @@ if __name__ == "__main__":
     # ---------- Test model accuracy ----------
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp']
-    #test_model_accuracy(model_types)
+    test_model_accuracy(model_types)
     
     
     # ---------- Test pipeline ----------
-    test_pipeline()
+    #test_pipeline()
     
     
     # ---------- Test crible genetique ----------

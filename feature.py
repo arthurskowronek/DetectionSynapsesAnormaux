@@ -40,7 +40,7 @@ def two_neighbors_distance_histogram(G, bins):
 
 # ---------- Feature extraction ----------
 
-def create_feature_vector(G, mean_intensity, median_width, image, component_props, intensity=None, n_bins=20,
+def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, Measure_diff_points_segment, image, component_props, intensity=None, n_bins=20,
                          include_texture=True, include_morphological=True,
                          include_histogram=True, include_multiscale=True,
                          include_other=True, verbose_warning=False):
@@ -788,11 +788,19 @@ def create_feature_vector(G, mean_intensity, median_width, image, component_prop
         min_distance = np.min(edge_lengths)
         # Add to feature vector
         feat_vector.extend([mean_distance, max_distance, median_distance, min_distance])
-        
     except Exception as e:
         if verbose_warning:
             print(f"Warning: Error computing mean distance: {e}")
         feat_vector.extend(np.zeros(4))  # Placeholder for distance features
+    
+    # add Measure_diff_slice, Measure_diff_points_segment to feat_vector
+    try:
+        feat_vector.append(Measure_diff_slice)
+        feat_vector.append(Measure_diff_points_segment)
+    except Exception as e:
+        if verbose_warning:
+            print(f"Warning: Error adding Measure_diff_slice and Measure_diff_points_segment: {e}")
+        feat_vector.extend(np.zeros(1 + 1))
     
     
     # Convert feat_vector to numpy array and check for NaNs or infinities
@@ -1008,7 +1016,7 @@ def get_regions_of_interest(coord, image_original, binary_mask):
 
     return region_props, refined_segmented
 
-def get_feature_vector(G, median_width, X, y, X_orig, max_images, mask_images, intensity, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
+def get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X, y, X_orig, max_images, mask_images, intensity, recompute=False, pkl_name=DEFAULT_PKL_NAME, n_features=N_FEAT, n_bins=N_BINS_FEAT):
     """
     Create feature vectors from preprocessed images.
     
@@ -1075,7 +1083,7 @@ def get_feature_vector(G, median_width, X, y, X_orig, max_images, mask_images, i
             mean_intensity = np.mean(image[mask == 0])
         
             component, label_seg = get_regions_of_interest(maxima, image_original, mask)
-            feat = create_feature_vector(G[im_num], mean_intensity, median_width[im_num], image, component, intensity[im_num], n_bins, 
+            feat = create_feature_vector(G[im_num], mean_intensity, median_width[im_num], Measure_diff_slice[im_num], Measure_diff_points_segment[im_num], image, component, intensity[im_num], n_bins, 
                                          include_texture=True, include_morphological=True,
                                          include_histogram=True, include_multiscale=True,
                                          include_other=True)
@@ -1189,7 +1197,7 @@ def select_features(X, y, k=10, method='mRMR', verbose_features_selected=False, 
         else:
             X_df = X.copy()
             
-        print(X_df)
+        #print(X_df)
         
         # Initialize MRMR selector
         # method 1 : F-Statistic
@@ -1212,7 +1220,7 @@ def select_features(X, y, k=10, method='mRMR', verbose_features_selected=False, 
         # transform the data to keep only the selected features 
         X_df = mrmr_selector.transform(X_df) 
         
-        print(f"Selected features (mRMR): {X_df.columns}")
+        #print(f"Selected features (mRMR): {X_df.columns}")
    
       
         # Get indices of selected features

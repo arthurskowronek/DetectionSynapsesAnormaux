@@ -386,6 +386,17 @@ def get_synapses_graph(worm_mask, maxima_coords):
     # Assign each point to the nearest center
     labels = np.argmin(distances, axis=1)
 
+    # count number of points in each segment
+    counts_points_by_segment = np.bincount(labels, minlength=NUMBER_OF_SEGMENTS)
+    #print("Number of points in each segment:")
+    for i in range(NUMBER_OF_SEGMENTS):
+        #print(f"Segment {i}: {counts_points_by_segment[i]} points")
+        diff_points = counts_points_by_segment[i] - np.mean(counts_points_by_segment)
+        #print(f"Segment {i}: {diff_points} points from the mean")
+    # compute the square root of the sum of the squares of the differences
+    Measure_diff_points_segment = np.sqrt(np.sum(diff_points**2))
+
+
     # 5. Plot maxima colored by segment and the centers
     """plt.figure(figsize=(8, 8))
     plt.imshow(worm_mask, cmap='gray')
@@ -570,9 +581,14 @@ def get_synapses_graph(worm_mask, maxima_coords):
         plt.show()"""
 
     # print numbers of points in each slice
-    """print("Number of points in each slice:")
+    print("Number of points in each slice:")
+    Nb_slice = np.zeros(6, dtype=int)
+    Diff_slice = np.zeros(6, dtype=int)
     for i in range(6):
-        print(f"Slice {i}: {np.sum(labels_slice == i)}")"""
+        Nb_slice[i] = np.sum(labels_slice == i)
+        Diff_slice[i] = Nb_slice[i] - np.mean(Nb_slice)
+        #print(f"Slice {i}: {Nb_slice[i]}")
+    Measure_diff_slice = np.sqrt(np.sum(Diff_slice**2))    
     
     
     # Decide number of cords based on the number of maxima in each slice
@@ -682,7 +698,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
     plt.title("Maxima Coordinates")
     plt.show()"""
 
-    return maxima, G, median_width
+    return maxima, G, median_width, Measure_diff_slice, Measure_diff_points_segment
 
 
 
@@ -1063,12 +1079,12 @@ def get_synapse_using_graph(image):
 
     if is_a_roll_worm(worm_mask):
         print("Image is a roll worm. Skipping...")
-        return [], [], 0
+        return [], [], 0, 0, 0
     else:
         # Get the synapses graph to get only the synapses
-        maxima, G, median_width = get_synapses_graph(worm_mask, local_max)
+        maxima, G, median_width, Measure_diff_slice, Measure_diff_points_segment = get_synapses_graph(worm_mask, local_max)
         maxima = list(map(tuple, maxima))   
-        return maxima, G, median_width
+        return maxima, G, median_width, Measure_diff_slice, Measure_diff_points_segment
     
 def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_PKL_NAME):
     """
@@ -1100,8 +1116,10 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
             X_derivative_intensity = dict_preprocess['X_derivative_intensity']
             maxima_coords = dict_preprocess['maxima_coords']
             mask_synapses = dict_preprocess['mask_synapses']
+            Graphs = dict_preprocess['Graphs']
+            median_width = dict_preprocess['median_width']
             print('Preprocessing loaded from file.')
-            return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses
+            return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses, Graphs, median_width
         except FileNotFoundError:
             print('Preprocessing file not found. Recomputing...')
             recompute = True
@@ -1124,6 +1142,8 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
     mask_synapses = [None] * len(X)
     Graphs = [None] * len(X)
     median_width = [None] * len(X)
+    Measure_diff_slice = [None] * len(X)
+    Measure_diff_points_segment = [None] * len(X)
     
     
     for im_num, image in enumerate(X):
@@ -1140,7 +1160,7 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
             X_intensity[im_num], X_derivative_intensity[im_num], maxima_coords[im_num] = get_high_intensity_pixels(mask_synapses[im_num], image)
         elif method == 2:
             try:
-                maxima_coords[im_num], Graphs[im_num], median_width[im_num] = get_synapse_using_graph(original_image)
+                maxima_coords[im_num], Graphs[im_num], median_width[im_num], Measure_diff_slice[im_num], Measure_diff_points_segment[im_num] = get_synapse_using_graph(original_image)
                     
                 # creat a mask with disk of radius 5 around each maxima
                 mask_synapses[im_num] = np.zeros_like(image)
@@ -1189,7 +1209,7 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
         
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
-    dict_preprocess = {'X_preprocessed': X_preprocessed, 'X_intensity': X_intensity, 'X_derivative_intensity': X_derivative_intensity, 'maxima_coords': maxima_coords, 'mask_synapses': mask_synapses}
+    dict_preprocess = {'X_preprocessed': X_preprocessed, 'X_intensity': X_intensity, 'X_derivative_intensity': X_derivative_intensity, 'maxima_coords': maxima_coords, 'mask_synapses': mask_synapses, 'Graphs': Graphs, 'median_width': median_width}
     joblib.dump(dict_preprocess, preprocess_file)
     
     #joblib.dump(X_preprocessed, preprocess_file)
@@ -1198,5 +1218,5 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
     
     # return le dictionnaire ? 
     
-    return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses, Graphs, median_width
+    return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses, Graphs, median_width, Measure_diff_slice, Measure_diff_points_segment
 
