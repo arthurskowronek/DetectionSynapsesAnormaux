@@ -581,7 +581,7 @@ def get_synapses_graph(worm_mask, maxima_coords):
         plt.show()"""
 
     # print numbers of points in each slice
-    print("Number of points in each slice:")
+    #print("Number of points in each slice:")
     Nb_slice = np.zeros(6, dtype=int)
     Diff_slice = np.zeros(6, dtype=int)
     for i in range(6):
@@ -1118,8 +1118,10 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
             mask_synapses = dict_preprocess['mask_synapses']
             Graphs = dict_preprocess['Graphs']
             median_width = dict_preprocess['median_width']
+            Measure_diff_slice = dict_preprocess['Measure_diff_slice']
+            Measure_diff_points_segment = dict_preprocess['Measure_diff_points_segment']
             print('Preprocessing loaded from file.')
-            return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses, Graphs, median_width
+            return X_preprocessed, X_intensity, X_derivative_intensity, maxima_coords, mask_synapses, Graphs, median_width, Measure_diff_slice, Measure_diff_points_segment
         except FileNotFoundError:
             print('Preprocessing file not found. Recomputing...')
             recompute = True
@@ -1209,7 +1211,7 @@ def get_preprocess_images(method = 1, recompute=False, X=None, pkl_name=DEFAULT_
         
     # Save preprocessing results
     DATASET_PKL_DIR.mkdir(exist_ok=True)
-    dict_preprocess = {'X_preprocessed': X_preprocessed, 'X_intensity': X_intensity, 'X_derivative_intensity': X_derivative_intensity, 'maxima_coords': maxima_coords, 'mask_synapses': mask_synapses, 'Graphs': Graphs, 'median_width': median_width}
+    dict_preprocess = {'X_preprocessed': X_preprocessed, 'X_intensity': X_intensity, 'X_derivative_intensity': X_derivative_intensity, 'maxima_coords': maxima_coords, 'mask_synapses': mask_synapses, 'Graphs': Graphs, 'median_width': median_width, 'Measure_diff_slice': Measure_diff_slice, 'Measure_diff_points_segment': Measure_diff_points_segment}
     joblib.dump(dict_preprocess, preprocess_file)
     
     #joblib.dump(X_preprocessed, preprocess_file)

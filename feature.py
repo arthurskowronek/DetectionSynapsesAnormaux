@@ -86,11 +86,12 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
     if not component_props:
         print("Warning: No components found in image.")
         # Return an empty feature vector
-        return np.array([0])
+        return np.array([0]), ["No Components Found"]
     
     # Always include number of detected components
     num_components = len(component_props)
     feat_vector = [num_components]
+    feature_names = ["Number of Components"]
     
     # Get intensity image if not provided
     if intensity is None:
@@ -155,10 +156,6 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")  # Ignore tous les warnings à l'intérieur du bloc
                 try:
-                    pass  # Add the code to execute here
-                except Exception as e:
-                    if verbose_warning:
-                        print(f"Warning: An error occurred: {e}")
                     # First Order Statistics
                     features, name = pyfeats.fos(roi_intensity, roi_mask)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
@@ -703,21 +700,45 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         min_feature = np.min(stacked_feature, axis=0)
                         max_feature = np.max(stacked_feature, axis=0)
                         
-                        # Append to feature vector
-                        feat_vector.extend(mean_feature)
-                        feat_vector.extend(std_feature)
+                        
+                        # Append to feature vector and track names
+                        for i in range(len(mean_feature)):
+                            feat_vector.append(mean_feature[i])
+                            feature_names.append(f"{key}_mean_{i}")
+                        
+                        for i in range(len(std_feature)):
+                            feat_vector.append(std_feature[i])
+                            feature_names.append(f"{key}_std_{i}")
+                        
                         # Only include min/max for key features to control vector length
                         if key.startswith(('A_FOS', 'A_GLCM', 'A_NGTDM', 'E_HuMoments')):
-                            feat_vector.extend(min_feature)
-                            feat_vector.extend(max_feature)
+                            for i in range(len(min_feature)):
+                                feat_vector.append(min_feature[i])
+                                feature_names.append(f"{key}_min_{i}")
+                            
+                            for i in range(len(max_feature)):
+                                feat_vector.append(max_feature[i])
+                                feature_names.append(f"{key}_max_{i}")
+          
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error processing feature {key}: {e}")
                 # Add zeros as placeholders for this feature
                 dim = expected_dimensions.get(key, 1)
-                feat_vector.extend(np.zeros(dim * 2))  # For mean and std
+                for i in range(dim):
+                    feat_vector.append(0.0)
+                    feature_names.append(f"{key}_mean_{i}")
+                for i in range(dim):
+                    feat_vector.append(0.0)
+                    feature_names.append(f"{key}_std_{i}")
                 if key.startswith(('A_FOS', 'A_GLCM', 'A_NGTDM', 'E_HuMoments')):
-                    feat_vector.extend(np.zeros(dim * 2))  # For min and max
+                    for i in range(dim):
+                        feat_vector.append(0.0)
+                        feature_names.append(f"{key}_min_{i}")
+                    for i in range(dim):
+                        feat_vector.append(0.0)
+                        feature_names.append(f"{key}_max_{i}")
+                
     
     # Add spatial distribution features
     try:
@@ -735,8 +756,15 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
             min_nn_dist = np.min(nearest_neighbor_dists)
             max_nn_dist = np.max(nearest_neighbor_dists)
             
-            # Add to feature vector
-            feat_vector.extend([mean_nn_dist, std_nn_dist, min_nn_dist, max_nn_dist])
+            feat_vector.append(mean_nn_dist)
+            feature_names.append("mean_nearest_neighbor_dist")
+            feat_vector.append(std_nn_dist)
+            feature_names.append("std_nearest_neighbor_dist")
+            feat_vector.append(min_nn_dist)
+            feature_names.append("min_nearest_neighbor_dist")
+            feat_vector.append(max_nn_dist)
+            feature_names.append("max_nearest_neighbor_dist")
+            
             
             # Try to compute Ripley's K if pointpats is available
             try:
@@ -750,28 +778,48 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         k_r = np.mean(count) / (len(centroid_positions) - 1)
                         ripley_k_values.append(k_r)
                 
-                feat_vector.extend(ripley_k_values)
+                for i, k_r in enumerate(ripley_k_values):
+                    feat_vector.append(k_r)
+                    feature_names.append(f"ripley_k_{i}")
             except Exception as e:
                 if verbose_warning:
                     print(f"Warning: Error computing Ripley's K: {e}")
-                feat_vector.extend(np.zeros(5))  # Placeholder for Ripley's K
+                for i in range(5):
+                    feat_vector.append(0.0)
+                    feature_names.append(f"ripley_k_{i}")
+
         else:
             # Add zeros for spatial features if too few components
-            feat_vector.extend(np.zeros(9))  # 4 for NN distances, 5 for Ripley's K
+            for name in ["mean_nearest_neighbor_dist", "std_nearest_neighbor_dist", 
+                        "min_nearest_neighbor_dist", "max_nearest_neighbor_dist"]:
+                feat_vector.append(0.0)
+                feature_names.append(name)
+            for i in range(5):
+                feat_vector.append(0.0)
+                feature_names.append(f"ripley_k_{i}")
     except Exception as e:
         if verbose_warning:
             print(f"Warning: Error computing spatial distribution features: {e}")
-        feat_vector.extend(np.zeros(9))  # Placeholder for spatial features
+        for name in ["mean_nearest_neighbor_dist", "std_nearest_neighbor_dist", 
+                    "min_nearest_neighbor_dist", "max_nearest_neighbor_dist"]:
+            feat_vector.append(0.0)
+            feature_names.append(name)
+        for i in range(5):
+            feat_vector.append(0.0)
+            feature_names.append(f"ripley_k_{i}")
     
-    # add the two_neighbors_distance_histogram function
+    # Two neighbors distance histogram
     try:
-        # Compute the two-neighbors distance histogram
         two_neighbors_distance_histogram = two_neighbors_distance_histogram(G, N_BINS_FEAT)
-        feat_vector.extend(two_neighbors_distance_histogram)
+        for i, val in enumerate(two_neighbors_distance_histogram):
+            feat_vector.append(val)
+            feature_names.append(f"two_neighbors_dist_hist_{i}")
     except Exception as e:
         if verbose_warning:
             print(f"Warning: Error computing two-neighbors distance histogram: {e}")
-        feat_vector.extend(np.zeros(N_BINS_FEAT))  # Placeholder for histogram features
+        for i in range(N_BINS_FEAT):
+            feat_vector.append(0.0)
+            feature_names.append(f"two_neighbors_dist_hist_{i}")
         
     # compute the mean, max, median, min distance of edges in G
     try:
@@ -787,28 +835,41 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
         median_distance = np.median(edge_lengths)
         min_distance = np.min(edge_lengths)
         # Add to feature vector
-        feat_vector.extend([mean_distance, max_distance, median_distance, min_distance])
+        feat_vector.append(mean_distance)
+        feature_names.append("mean_edge_length")
+        feat_vector.append(max_distance)
+        feature_names.append("max_edge_length")
+        feat_vector.append(median_distance)
+        feature_names.append("median_edge_length")
+        feat_vector.append(min_distance)
+        feature_names.append("min_edge_length")
     except Exception as e:
         if verbose_warning:
-            print(f"Warning: Error computing mean distance: {e}")
-        feat_vector.extend(np.zeros(4))  # Placeholder for distance features
+            print(f"Warning: Error computing edge length statistics: {e}")
+        for name in ["mean_edge_length", "max_edge_length", "median_edge_length", "min_edge_length"]:
+            feat_vector.append(0.0)
+            feature_names.append(name)
     
-    # add Measure_diff_slice, Measure_diff_points_segment to feat_vector
+    # Measure diff features
     try:
         feat_vector.append(Measure_diff_slice)
+        feature_names.append("measure_diff_slice")
         feat_vector.append(Measure_diff_points_segment)
+        feature_names.append("measure_diff_points_segment")
     except Exception as e:
         if verbose_warning:
             print(f"Warning: Error adding Measure_diff_slice and Measure_diff_points_segment: {e}")
-        feat_vector.extend(np.zeros(1 + 1))
-    
+        feat_vector.append(0.0)
+        feature_names.append("measure_diff_slice")
+        feat_vector.append(0.0)
+        feature_names.append("measure_diff_points_segment")
     
     # Convert feat_vector to numpy array and check for NaNs or infinities
     feat_vector = np.array(feat_vector, dtype=np.float64)
     feat_vector = np.nan_to_num(feat_vector, nan=0.0, posinf=0.0, neginf=0.0)
     
-    # Return the final feature vector as a numpy array
-    return feat_vector
+    # Return both the feature vector and feature names
+    return feat_vector, feature_names
 
 def get_regions_of_interest(coord, image_original, binary_mask):
     
@@ -1070,7 +1131,8 @@ def get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_
             'data': [],
             'filename': [],
             'components': [],
-            'label_components': []
+            'label_components': [],
+            'features name': []
         }
         
         for im_num, image in enumerate(X):
@@ -1083,16 +1145,17 @@ def get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_
             mean_intensity = np.mean(image[mask == 0])
         
             component, label_seg = get_regions_of_interest(maxima, image_original, mask)
-            feat = create_feature_vector(G[im_num], mean_intensity, median_width[im_num], Measure_diff_slice[im_num], Measure_diff_points_segment[im_num], image, component, intensity[im_num], n_bins, 
+            feat, features_name = create_feature_vector(G[im_num], mean_intensity, median_width[im_num], Measure_diff_slice[im_num], Measure_diff_points_segment[im_num], image, component, intensity[im_num], n_bins, 
                                          include_texture=True, include_morphological=True,
-                                         include_histogram=True, include_multiscale=True,
-                                         include_other=True)
+                                         include_histogram=False, include_multiscale=False,
+                                         include_other=False)
 
             features['label'].append(y[im_num])
             features['data'].append(feat)
             features['filename'].append(f"image_{im_num}")
             features['components'].append(component)
             features['label_components'].append(label_seg)
+            features['features name'].append(features_name)
             
             X_feat.append(feat)
         
@@ -1105,6 +1168,12 @@ def get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_
                 X_feat[i] = np.zeros(max_len)
         
         X_feat = np.array(X_feat)
+        
+        # print number of features
+        print(f'Number of features: {X_feat.shape[1]}')
+        # print number of images
+        print(f'Number of images: {X_feat.shape[0]}')
+        
         print('Features computed.')
     
         # Save features in pkl file

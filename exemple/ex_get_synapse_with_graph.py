@@ -834,7 +834,6 @@ if __name__ == "__main__":
     for image, source_dir in image_data:
         image_path = os.path.join(source_dir, image)
         print(f"---------- Processing {image_path} ----------")
-            
       
         try:
             # Preprocessing

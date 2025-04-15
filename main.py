@@ -2,13 +2,13 @@ from utils import *
 from training import *
 from feature import *
 from preprocessing import *
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler, MaxAbsScaler, Normalizer, QuantileTransformer, PowerTransformer, FunctionTransformer
 from sklearn.decomposition import PCA
 
 
 def test_model_accuracy(model_types):
     # ---------- Load dataset ----------
-    filename_pkl_dataset = 'dataset_2025-04-15_10-17-39'
+    filename_pkl_dataset = 'dataset_2025-04-15_14-59-09'
     data = create_dataset(reimport_images=False, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Convert to numpy arrays
@@ -23,15 +23,28 @@ def test_model_accuracy(model_types):
     X_copy = X.copy()
     
     # ---------- Preprocessing ----------
-    filename_pkl_dataset = 'dataset_2025-04-15_10-17-39_preprocessing_1'
+    filename_pkl_dataset = 'dataset_2025-04-15_15-51-41_preprocessing_1'
     X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width, Measure_diff_slice, Measure_diff_points_segment = get_preprocess_images(method=2, recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
-    X_features, features = get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)
-    
-    # save features to a xlsx file
-    df = pd.DataFrame(X_features)
-    df.to_excel('features.xlsx', index=False)
+    if False:
+        X_features, features = get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)    
+        # save features to a xlsx file
+        df = pd.DataFrame(X_features)
+        columns = features['features name'][1]
+        df.columns = columns
+        # save to xlsx file in excel directory
+        # create excel directory if it doesn't exist
+        if not os.path.exists('excel'):
+            os.makedirs('excel')
+        # save to excel file
+        df.to_excel('excel/features.xlsx', index=False)
+    else:
+        # load features from xlsx file
+        df = pd.read_excel('excel/features.xlsx')
+        X_features = df.values
+        # get features name from xlsx file
+        features_name = df.columns.values
     
     
     # Detect indice of elements in X_feat which contain only 0s
@@ -41,81 +54,183 @@ def test_model_accuracy(model_types):
     y = np.delete(y, indices, axis=0)
     
     # ---------- Feature Reduction ----------
-    # Scale features
-    scaler = StandardScaler()
-    X_features = scaler.fit_transform(X_features)
-    
-    # change NaN values to 0
-    X_features = np.nan_to_num(X_features)
-    
     X_features_copied = X_features.copy()
     
-    pca = PCA(n_components=2)
+    # Scale features
+    scaler = StandardScaler()
+    #scaler = RobustScaler()
+    #scaler = MinMaxScaler()
+    #scaler = MaxAbsScaler()
+    #scaler = Normalizer()
+    #scaler = QuantileTransformer()
+    X_features_copied = scaler.fit_transform(X_features_copied)
+    
+    # change NaN values to 0
+    X_features_copied = np.nan_to_num(X_features_copied)
+    
+    pca = PCA(n_components=20)
     X_features_PCA = pca.fit_transform(X_features_copied)
     
     print(f"Explained variance ratio: {pca.explained_variance_ratio_}")
     print(f"Explained variance: {pca.explained_variance_}")
     
     # plot the feature space with the 2 first components and label each point by if it is a mutant or not
-    plt.figure(figsize=(10, 10))
+    """plt.figure(figsize=(10, 10))
     plt.scatter(X_features_PCA[:, 0], X_features_PCA[:, 1], c=y, cmap='viridis', alpha=0.5)
     plt.title('Feature space with PCA')
     plt.xlabel('PCA 1')
     plt.ylabel('PCA 2')
     plt.colorbar(ticks=[0, 1], label='Label') 
     plt.clim(-0.5, 1.5)
-    plt.show()
+    plt.show()"""
+    
+    from mpl_toolkits.mplot3d import Axes3D
+    # 3D Plot
+    """fig = plt.figure(figsize=(12, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    sc = ax.scatter(
+        X_features_PCA[:, 0],
+        X_features_PCA[:, 1],
+        X_features_PCA[:, 2],
+        c=y,
+        cmap='viridis',
+        alpha=0.6
+    )
+    # Set color limits on the scatter, not on the colorbar
+    sc.set_clim(-0.5, 1.5)
+    cbar = fig.colorbar(sc, ticks=[0, 1], label='Label')
+    ax.set_title('3D Feature space with PCA')
+    ax.set_xlabel('PCA 1')
+    ax.set_ylabel('PCA 2')
+    ax.set_zlabel('PCA 3')
+    plt.tight_layout()
+    plt.show()"""
+
+    X_features = X_features_PCA
     
     # ---------- Feature Selection ----------
-    number_features_before = X_features.shape[1]
+    """number_features_before = X_features.shape[1]
     
     # scale features
+    X_features_selection = X_features.copy()
     scaler = StandardScaler()
-    X_features = scaler.fit_transform(X_features)
+    X_features_selection = scaler.fit_transform(X_features_selection)
     
     # Here we choose the top k features 
-    X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
+    X_features, selector = select_features(X_features_selection, y, k=10, method='kbest', verbose_features_selected=False) 
     
-    number_features_after = X_features.shape[1]
+    number_features_after = X_features.shape[1]"""
     
     # ---------- Test all models and generate a comprehensive report ----------
-    results = {}
+    # Define all scalers to test
+    scalers = {
+        'NoScaler': FunctionTransformer(func=None),
+        'StandardScaler': StandardScaler(),
+        'RobustScaler': RobustScaler(),
+        'MinMaxScaler': MinMaxScaler(),
+        'MaxAbsScaler': MaxAbsScaler(),
+        'Normalizer': Normalizer(),
+        'QuantileTransformer': QuantileTransformer()
+    }
 
-    print("Starting model comparison...\n")
+    """scalers = {
+        'NoScaler': FunctionTransformer(func=None)
+    }"""
 
-    for model_type in model_types:
-        print(f"\n{'-'*50}")
-        print(f"Evaluating {model_type}...")
-        mean_corr_estim = train_model(X_features, y, verbose_plot = True, model_type=model_type, n_runs=100)
-        results[model_type] = mean_corr_estim
-        print(f"{'-'*50}\n")
+    # Results will be a nested dictionary: scaler_name -> model_type -> accuracy
+    all_results = {}
+    best_combinations = {}
 
-    # Find the best model
-    best_model = max(results, key=results.get)
+    print("Starting comprehensive model and scaler comparison...\n")
 
-    # Print comprehensive report
-    print("\n" + "="*70)
-    print("MODEL COMPARISON REPORT".center(70))
-    print("="*70)
-    print(f"{'Model Type':<35} | {'Accuracy':<15} | {'Rank':<10}")
-    print("-"*70)
+    # Loop through each scaler
+    for scaler_name, scaler in scalers.items():
+        print(f"\n{'#'*80}")
+        print(f" TESTING WITH {scaler_name} ".center(80, '#'))
+        print(f"{'#'*80}\n")
+        
+        if scaler_name == 'NoScaler':
+            X_scaled = X_features.copy()  # Use a copy of the original data
+            print("Using raw unscaled data...")
+        else:
+            X_scaled = scaler.fit_transform(X_features)
+        
+        # Store results for this scaler
+        scaler_results = {}
+        
+        # Test each model with the current scaler
+        for model_type in model_types:
+            print(f"\n{'-'*50}")
+            print(f"Evaluating {model_type} with {scaler_name}...")
+            mean_corr_estim = train_model(X_scaled, y, verbose_plot=False, model_type=model_type, n_runs=100)
+            scaler_results[model_type] = mean_corr_estim
+            print(f"Accuracy: {mean_corr_estim*100:.2f}%")
+            print(f"{'-'*50}\n")
+        
+        # Store results for this scaler
+        all_results[scaler_name] = scaler_results
+        
+        # Find the best model for this scaler
+        best_model = max(scaler_results, key=scaler_results.get)
+        best_accuracy = scaler_results[best_model]
+        best_combinations[scaler_name] = (best_model, best_accuracy)
+        
+        # Print summary for this scaler
+        print(f"\n{'='*70}")
+        print(f"SUMMARY FOR {scaler_name}".center(70))
+        print(f"{'='*70}")
+        print(f"{'Model Type':<35} | {'Accuracy':<15} | {'Rank':<10}")
+        print(f"{'-'*70}")
+        
+        # Sort models by accuracy for ranking
+        sorted_results = sorted(scaler_results.items(), key=lambda x: x[1], reverse=True)
+        for i, (model, accuracy) in enumerate(sorted_results):
+            is_best = model == best_model
+            model_name = f"{model} {'(BEST)' if is_best else ''}"
+            print(f"{model_name:<35} | {accuracy*100:.2f}%{' '*9} | {i+1}")
+        
+        print(f"{'='*70}")
+        print(f"Best model with {scaler_name}: {best_model}")
+        print(f"Best accuracy: {best_accuracy*100:.2f}%")
+        print(f"{'='*70}\n")
 
-    # Sort models by accuracy for ranking
-    sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
+    # Final comprehensive report
+    print("\n" + "="*100)
+    print("COMPREHENSIVE MODEL-SCALER COMPARISON REPORT".center(100))
+    print("="*100)
+    print(f"{'Scaling Method':<20} | {'Best Model':<35} | {'Accuracy':<15} | {'Overall Rank':<10}")
+    print("-"*100)
 
-    for i, (model, accuracy) in enumerate(sorted_results):
-        is_best = model == best_model
-        model_name = f"{model} {'(BEST)' if is_best else ''}"
-        print(f"{model_name:<35} | {accuracy*100:.2f}%{' '*9} | {i+1}")
+    # Sort by overall best accuracy across all scalers
+    sorted_combinations = sorted(best_combinations.items(), key=lambda x: x[1][1], reverse=True)
+    for i, (scaler_name, (best_model, accuracy)) in enumerate(sorted_combinations):
+        is_overall_best = i == 0
+        scaler_display = f"{scaler_name} {'(BEST)' if is_overall_best else ''}"
+        print(f"{scaler_display:<20} | {best_model:<35} | {accuracy*100:.2f}%{' '*9} | {i+1}")
 
-    print("="*70)
-    print(f"Best model: {best_model}")
-    print(f"Best accuracy: {results[best_model]*100:.2f}%")
-    print("="*70)
-    
-    
-    #print(f"Number of features before: {number_features_before}")
-    #print(f"Number of features after: {number_features_after}")
+    print("="*100)
+    best_scaler, (best_model, best_acc) = sorted_combinations[0]
+    print(f"Overall best combination: {best_scaler} with {best_model}")
+    print(f"Overall best accuracy: {best_acc*100:.2f}%")
+    print("="*100)
+
+    # --- Create a heatmap visualization of all results ---
+
+    # Convert nested dictionary to DataFrame for visualization
+    results_df = pd.DataFrame({
+        scaler_name: {model: acc for model, acc in models.items()} 
+        for scaler_name, models in all_results.items()
+    })
+
+    # Plot heatmap
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(results_df.T * 100, annot=True, fmt='.2f', cmap='viridis', 
+                xticklabels=results_df.index, yticklabels=results_df.columns)
+    plt.title('Model Accuracy (%) for Different Scaling Methods')
+    plt.ylabel('Scaling Method')
+    plt.xlabel('Model Type')
+    plt.tight_layout()
+    plt.show()
     
        
 def test_pipeline():
@@ -157,6 +272,7 @@ def test_pipeline():
     # Show features
     X_colored = colorize_image(X, features)
     display_4_images(X[0], X_colored[0], X[1], X_colored[1], ["Original Mutant", "Colored Mutant", "Original Wild-Type", "Colored Wild-Type"])
+    
 
 
 def crible_genetique():
