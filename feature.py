@@ -155,8 +155,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
         if include_texture:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")  # Ignore tous les warnings à l'intérieur du bloc
-                try:
-                    # First Order Statistics
+                try: # First Order Statistics
                     features, name = pyfeats.fos(roi_intensity, roi_mask)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -170,8 +169,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         print(f"Warning: Error computing FOS features: {e}")
                     roi_features['A_FOS'] = np.zeros(expected_dimensions['A_FOS'])
                     
-                try:    
-                    # Gray Level Co-occurrence Matrix
+                """try: # Gray Level Co-occurrence Matrix
                     features, name = pyfeats.glcm_features(roi_intensity, ignore_zeros=True)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -183,10 +181,9 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                 except Exception as e:
                     if verbose_warning:
                         print(f"Warning: Error computing GLCM features: {e}")
-                    roi_features['A_GLCM'] = np.zeros(expected_dimensions['A_GLCM'])
+                    roi_features['A_GLCM'] = np.zeros(expected_dimensions['A_GLCM'])"""
                     
-                try:     
-                    # Gray Level Difference Statistics
+                try: # Gray Level Difference Statistics
                     features, name = pyfeats.glds_features(roi_intensity, roi_mask, 
                                                                 Dx=[0,1,1,1], Dy=[1,1,0,-1])
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
@@ -201,8 +198,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         print(f"Warning: Error computing GLDS features: {e}")
                     roi_features['A_GLDS'] = np.zeros(expected_dimensions['A_GLDS'])
                     
-                try:     
-                    # Neighborhood Gray Tone Difference Matrix
+                try: # Neighborhood Gray Tone Difference Matrix
                     features, name = pyfeats.ngtdm_features(roi_intensity, roi_mask, d=1)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -216,8 +212,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         print(f"Warning: Error computing NGTDM features: {e}")
                     roi_features['A_NGTDM'] = np.zeros(expected_dimensions['A_NGTDM'])
                     
-                try:     
-                    # Statistical Feature Matrix
+                try: # Statistical Feature Matrix
                     features, name = pyfeats.sfm_features(roi_intensity, roi_mask, Lr=4, Lc=4)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -231,8 +226,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         print(f"Warning: Error computing SFM features: {e}")
                     roi_features['A_SFM'] = np.zeros(expected_dimensions['A_SFM'])
                     
-                try:     
-                    # Laws Texture Energy
+                """try: # Laws Texture Energy
                     features, name = pyfeats.lte_measures(roi_intensity, roi_mask, l=7)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -244,10 +238,9 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                 except Exception as e:
                     if verbose_warning:
                         print(f"Warning: Error computing LTE features: {e}")
-                    roi_features['A_LTE'] = np.zeros(expected_dimensions['A_LTE'])
+                    roi_features['A_LTE'] = np.zeros(expected_dimensions['A_LTE'])"""
                     
-                try:     
-                    # Fractal Dimension Texture Analysis
+                """try: # Fractal Dimension Texture Analysis
                     features, name = pyfeats.fdta(roi_intensity, roi_mask, s=3)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -259,10 +252,9 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                 except Exception as e:
                     if verbose_warning:
                         print(f"Warning: Error computing FDTA features: {e}")
-                    roi_features['A_FDTA'] = np.zeros(expected_dimensions['A_FDTA'])
+                    roi_features['A_FDTA'] = np.zeros(expected_dimensions['A_FDTA'])"""
                     
-                try:     
-                    # Gray Level Run Length Matrix
+                try: # Gray Level Run Length Matrix
                     features, name = pyfeats.glrlm_features(roi_intensity, roi_mask, Ng=256)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -276,8 +268,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         print(f"Warning: Error computing GLRLM features: {e}")
                     roi_features['A_GLRLM'] = np.zeros(expected_dimensions['A_GLRLM'])
                     
-                try:     
-                    # Fourier Power Spectrum
+                try: # Fourier Power Spectrum
                     features, name = pyfeats.fps(roi_intensity, roi_mask)
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -291,8 +282,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         print(f"Warning: Error computing FPS features: {e}")
                     roi_features['A_FPS'] = np.zeros(expected_dimensions['A_FPS'])
                     
-                try:     
-                    # Shape Parameters
+                try: # Shape Parameters
                     # Calculate perimeter first
                     perimeter = prop.perimeter
                     features, name = pyfeats.shape_parameters(
@@ -311,8 +301,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                         print(f"Warning: Error computing shape parameters features: {e}")
                     roi_features['A_Shape_Parameters'] = np.zeros(expected_dimensions['A_Shape_Parameters'])
                     
-                try:     
-                    # Higher Order Spectra
+                """try: # Higher Order Spectra
                     # Using adaptive thresholds based on intensity range
                     intensity_min = np.min(roi_intensity)
                     intensity_max = np.max(roi_intensity)
@@ -329,10 +318,9 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                 except Exception as e:
                     if verbose_warning:
                         print(f"Warning: Error computing HOS features: {e}")
-                    roi_features['A_HOS'] = np.zeros(expected_dimensions['A_HOS'])
+                    roi_features['A_HOS'] = np.zeros(expected_dimensions['A_HOS'])"""
                     
-                try:     
-                    # Local Binary Patterns
+                """try: # Local Binary Patterns
                     roi_int_uint8 = (roi_intensity * 255 / roi_intensity.max()).astype(np.uint8)
                     features, name = pyfeats.lbp_features(roi_int_uint8, roi_int_uint8, 
                                                                 P=[8,16,24], R=[1,2,3]) 
@@ -346,10 +334,9 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                 except Exception as e:
                     if verbose_warning:
                         print(f"Warning: Error computing LPB features: {e}")
-                    roi_features['A_LBP'] = np.zeros(expected_dimensions['A_LBP'])
+                    roi_features['A_LBP'] = np.zeros(expected_dimensions['A_LBP'])"""
                     
-                try:     
-                    # Gray Level Size Zone Matrix
+                try: # Gray Level Size Zone Matrix
                     features, name = pyfeats.glszm_features(roi_intensity, roi_mask) 
                     features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     # Ensure correct dimension
@@ -365,8 +352,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
             
         # ---------- B. Morphological Features ---------- 
         if include_morphological:
-            try:
-                # Grayscale Morphology
+            try: # Grayscale Morphology
                 pdf_features, cdf_features = pyfeats.grayscale_morphology_features(roi_intensity, N=30)
                 
                 # Ensure correct dimensions
@@ -388,11 +374,9 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                 roi_features['B_Morphological_Grayscale_pdf'] = np.zeros(expected_dimensions['B_Morphological_Grayscale_pdf'])
                 roi_features['B_Morphological_Grayscale_cdf'] = np.zeros(expected_dimensions['B_Morphological_Grayscale_cdf'])
 
-            # Désactiver temporairement les RuntimeWarnings ici
-            with warnings.catch_warnings():
+            """with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
-                try:    
-                    # Multi-level Binary Morphology
+                try: # Multi-level Binary Morphology
                     intensity_min = np.min(roi_intensity)
                     intensity_max = np.max(roi_intensity)
                     th_low = intensity_min + 0.25 * (intensity_max - intensity_min)
@@ -416,8 +400,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                             if verbose_warning:
                                 print(f"Warning: {key} features dimension mismatch. Expected {expected_dimensions[key]}, got {len(features)}")
                             features = np.zeros(expected_dimensions[key])
-                        roi_features[key] = features
-                        
+                        roi_features[key] = features    
                 except Exception as e:
                     if verbose_warning:
                         print(f"Warning: Error computing morphological Binary features: {e}")
@@ -426,7 +409,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
                     roi_features['B_Morphological_Binary_H_pdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_H_pdf'])
                     roi_features['B_Morphological_Binary_L_cdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_L_cdf'])
                     roi_features['B_Morphological_Binary_M_cdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_M_cdf'])
-                    roi_features['B_Morphological_Binary_H_cdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_H_cdf'])
+                    roi_features['B_Morphological_Binary_H_cdf'] = np.zeros(expected_dimensions['B_Morphological_Binary_H_cdf'])"""
                     
         # ---------- C. Histogram-based Features ---------- 
         if include_histogram:
@@ -1072,8 +1055,7 @@ def get_regions_of_interest(coord, image_original, binary_mask):
 
     # Step 7: Compute refined region properties
     region_props = ski.measure.regionprops(refined_segmented, intensity_image=image_original)
-    
-    #print(f"Detected {len(region_props)} synapses")
+
 
     return region_props, refined_segmented
 
@@ -1141,12 +1123,12 @@ def get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_
             maxima = max_images[im_num]
             mask = mask_images[im_num]
             
-            # get mean intensity of background
-            mean_intensity = np.mean(image[mask == 0])
+            # get mean intensity of the worm
+            mean_intensity = np.mean(image[mask == 1])
         
             component, label_seg = get_regions_of_interest(maxima, image_original, mask)
             feat, features_name = create_feature_vector(G[im_num], mean_intensity, median_width[im_num], Measure_diff_slice[im_num], Measure_diff_points_segment[im_num], image, component, intensity[im_num], n_bins, 
-                                         include_texture=True, include_morphological=True,
+                                         include_texture=True, include_morphological=False,
                                          include_histogram=False, include_multiscale=False,
                                          include_other=False)
 
@@ -1171,8 +1153,6 @@ def get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_
         
         # print number of features
         print(f'Number of features: {X_feat.shape[1]}')
-        # print number of images
-        print(f'Number of images: {X_feat.shape[0]}')
         
         print('Features computed.')
     

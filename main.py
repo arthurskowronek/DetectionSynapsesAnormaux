@@ -27,7 +27,7 @@ def test_model_accuracy(model_types):
     X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width, Measure_diff_slice, Measure_diff_points_segment = get_preprocess_images(method=2, recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
-    if False:
+    if True:
         X_features, features = get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)    
         # save features to a xlsx file
         df = pd.DataFrame(X_features)
@@ -273,7 +273,6 @@ def test_pipeline():
     X_colored = colorize_image(X, features)
     display_4_images(X[0], X_colored[0], X[1], X_colored[1], ["Original Mutant", "Colored Mutant", "Original Wild-Type", "Colored Wild-Type"])
     
-
 
 def crible_genetique():
     
