@@ -651,6 +651,8 @@ def get_synapses_graph(worm_mask, maxima_coords):
                 min_dist = dist
 
         if best_j is not None:
+            G.add_node(i, centroid=p1)
+            G.add_node(best_j, centroid=maxima_coords[best_j])
             G.add_edge(i, best_j)
         else:
             G.add_node(i)

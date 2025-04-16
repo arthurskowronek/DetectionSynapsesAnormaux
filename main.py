@@ -4,11 +4,11 @@ from feature import *
 from preprocessing import *
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler, MaxAbsScaler, Normalizer, QuantileTransformer, PowerTransformer, FunctionTransformer
 from sklearn.decomposition import PCA
-
+from mpl_toolkits.mplot3d import Axes3D
 
 def test_model_accuracy(model_types):
     # ---------- Load dataset ----------
-    filename_pkl_dataset = 'dataset_2025-04-15_14-59-09'
+    filename_pkl_dataset = 'dataset_2025-04-16_11-42-01'
     data = create_dataset(reimport_images=False, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False, pkl_name=filename_pkl_dataset + '.pkl')
     
     # Convert to numpy arrays
@@ -23,11 +23,11 @@ def test_model_accuracy(model_types):
     X_copy = X.copy()
     
     # ---------- Preprocessing ----------
-    filename_pkl_dataset = 'dataset_2025-04-15_15-51-41_preprocessing_1'
+    filename_pkl_dataset = 'dataset_2025-04-16_11-42-01_preprocessing_1'
     X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width, Measure_diff_slice, Measure_diff_points_segment = get_preprocess_images(method=2, recompute=False, X=X_copy, pkl_name=filename_pkl_dataset)
     
     # ---------- Compute features ----------
-    if True:
+    if False:
         X_features, features = get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)    
         # save features to a xlsx file
         df = pd.DataFrame(X_features)
@@ -46,12 +46,17 @@ def test_model_accuracy(model_types):
         # get features name from xlsx file
         features_name = df.columns.values
     
+    print(f"Number of features: {X_features.shape[1]}")
+    print(f"Number of samples: {X_features.shape[0]}")
     
     # Detect indice of elements in X_feat which contain only 0s
     indices = np.where(np.all(X_features == 0, axis=1))[0]
     # Remove these elements from X_feat and y
     X_features = np.delete(X_features, indices, axis=0)
     y = np.delete(y, indices, axis=0)
+    
+    print(f"Number of features after removing 0s: {X_features.shape[1]}")
+    print(f"Number of samples: {X_features.shape[0]}")
     
     # ---------- Feature Reduction ----------
     X_features_copied = X_features.copy()
@@ -75,18 +80,17 @@ def test_model_accuracy(model_types):
     print(f"Explained variance: {pca.explained_variance_}")
     
     # plot the feature space with the 2 first components and label each point by if it is a mutant or not
-    """plt.figure(figsize=(10, 10))
+    plt.figure(figsize=(10, 10))
     plt.scatter(X_features_PCA[:, 0], X_features_PCA[:, 1], c=y, cmap='viridis', alpha=0.5)
     plt.title('Feature space with PCA')
     plt.xlabel('PCA 1')
     plt.ylabel('PCA 2')
     plt.colorbar(ticks=[0, 1], label='Label') 
     plt.clim(-0.5, 1.5)
-    plt.show()"""
+    plt.show()
     
-    from mpl_toolkits.mplot3d import Axes3D
     # 3D Plot
-    """fig = plt.figure(figsize=(12, 10))
+    fig = plt.figure(figsize=(12, 10))
     ax = fig.add_subplot(111, projection='3d')
     sc = ax.scatter(
         X_features_PCA[:, 0],
@@ -104,12 +108,12 @@ def test_model_accuracy(model_types):
     ax.set_ylabel('PCA 2')
     ax.set_zlabel('PCA 3')
     plt.tight_layout()
-    plt.show()"""
+    plt.show()
 
     X_features = X_features_PCA
     
     # ---------- Feature Selection ----------
-    """number_features_before = X_features.shape[1]
+    number_features_before = X_features.shape[1]
     
     # scale features
     X_features_selection = X_features.copy()
@@ -119,7 +123,7 @@ def test_model_accuracy(model_types):
     # Here we choose the top k features 
     X_features, selector = select_features(X_features_selection, y, k=10, method='kbest', verbose_features_selected=False) 
     
-    number_features_after = X_features.shape[1]"""
+    number_features_after = X_features.shape[1]
     
     # ---------- Test all models and generate a comprehensive report ----------
     # Define all scalers to test

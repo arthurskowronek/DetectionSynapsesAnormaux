@@ -23,18 +23,38 @@ from constants import *
 def two_neighbors_distance_histogram(G, bins):
 
     # Compute the distance matrix
-    dist_matrix = distance_matrix(G.nodes, G.nodes)
+    centroids = np.array([G.nodes[n]['centroid'] for n in G.nodes()])
+    dist_matrix = distance_matrix(centroids, centroids)
+    #dist_matrix = distance_matrix(G.nodes, G.nodes)
     
     # Get the distances of neighboring nodes
     neighbor_distances = []
     for node in G.nodes:
         neighbors = list(G.neighbors(node))
         for neighbor in neighbors:
-            if node != neighbor:
+            if node != neighbor: # Avoid self-loops
                 neighbor_distances.append(dist_matrix[node, neighbor])
                 
     # Compute the histogram
     hist, _ = np.histogram(neighbor_distances, bins=bins)
+    
+    
+    """# Build node list and index
+    node_list = list(G.nodes())
+    node_index = {n: i for i, n in enumerate(node_list)}
+
+    # Compute centroids and distance matrix
+    centroids = np.array([G.nodes[n]['centroid'] for n in node_list])
+    dist_matrix = distance_matrix(centroids, centroids)
+
+    # Get the distances of neighboring nodes (without double-counting)
+    neighbor_distances = []
+    for u, v in G.edges():
+        i, j = node_index[u], node_index[v]
+        neighbor_distances.append(dist_matrix[i, j])
+
+    # Compute the histogram
+    hist, _ = np.histogram(neighbor_distances, bins=bins)"""
     
     return hist
 
@@ -792,7 +812,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
             feature_names.append(f"ripley_k_{i}")
     
     # Two neighbors distance histogram
-    try:
+    """try:
         two_neighbors_distance_histogram = two_neighbors_distance_histogram(G, N_BINS_FEAT)
         for i, val in enumerate(two_neighbors_distance_histogram):
             feat_vector.append(val)
@@ -802,7 +822,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
             print(f"Warning: Error computing two-neighbors distance histogram: {e}")
         for i in range(N_BINS_FEAT):
             feat_vector.append(0.0)
-            feature_names.append(f"two_neighbors_dist_hist_{i}")
+            feature_names.append(f"two_neighbors_dist_hist_{i}")"""
         
     # compute the mean, max, median, min distance of edges in G
     try:
@@ -817,6 +837,7 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
         max_distance = np.max(edge_lengths)
         median_distance = np.median(edge_lengths)
         min_distance = np.min(edge_lengths)
+        number_edges_sup_mean = len(edge_lengths[edge_lengths > 3*median_distance])/len(edge_lengths)
         # Add to feature vector
         feat_vector.append(mean_distance)
         feature_names.append("mean_edge_length")
@@ -826,6 +847,8 @@ def create_feature_vector(G, mean_intensity, median_width, Measure_diff_slice, M
         feature_names.append("median_edge_length")
         feat_vector.append(min_distance)
         feature_names.append("min_edge_length")
+        feat_vector.append(number_edges_sup_mean)
+        feature_names.append("number_edges_sup_mean")
     except Exception as e:
         if verbose_warning:
             print(f"Warning: Error computing edge length statistics: {e}")
