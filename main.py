@@ -5,8 +5,9 @@ from preprocessing import *
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler, MaxAbsScaler, Normalizer, QuantileTransformer, PowerTransformer, FunctionTransformer
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
+from sklearn.utils import shuffle
 
-def test_model_accuracy(model_types):
+def test_model_accuracy(model_types, k_test=12):
     # ---------- Load dataset ----------
     filename_pkl_dataset = 'dataset_2025-04-16_11-42-01'
     data = create_dataset(reimport_images=False, test_random_mutant=False, test_random_wildtype=False, data_augmentation=False, pkl_name=filename_pkl_dataset + '.pkl')
@@ -45,9 +46,7 @@ def test_model_accuracy(model_types):
         X_features = df.values
         # get features name from xlsx file
         features_name = df.columns.values
-    
-    print(f"Number of features: {X_features.shape[1]}")
-    print(f"Number of samples: {X_features.shape[0]}")
+
     
     # Detect indice of elements in X_feat which contain only 0s
     indices = np.where(np.all(X_features == 0, axis=1))[0]
@@ -55,42 +54,40 @@ def test_model_accuracy(model_types):
     X_features = np.delete(X_features, indices, axis=0)
     y = np.delete(y, indices, axis=0)
     
-    print(f"Number of features after removing 0s: {X_features.shape[1]}")
-    print(f"Number of samples: {X_features.shape[0]}")
+    # Detect features with all 0s
+    indices = np.where(np.all(X_features == 0, axis=0))[0]
+    # Remove these features from X_feat
+    X_features = np.delete(X_features, indices, axis=1)
+    
     
     # ---------- Feature Reduction ----------
     X_features_copied = X_features.copy()
     
     # Scale features
-    scaler = StandardScaler()
-    #scaler = RobustScaler()
-    #scaler = MinMaxScaler()
-    #scaler = MaxAbsScaler()
-    #scaler = Normalizer()
-    #scaler = QuantileTransformer()
+    scaler = StandardScaler() # the best for a PCA
     X_features_copied = scaler.fit_transform(X_features_copied)
     
     # change NaN values to 0
     X_features_copied = np.nan_to_num(X_features_copied)
     
-    pca = PCA(n_components=20)
+    pca = PCA(n_components=31)
     X_features_PCA = pca.fit_transform(X_features_copied)
     
-    print(f"Explained variance ratio: {pca.explained_variance_ratio_}")
-    print(f"Explained variance: {pca.explained_variance_}")
+    #print(f"Explained variance ratio: {pca.explained_variance_ratio_}")
+    #print(f"Explained variance: {pca.explained_variance_}")
     
     # plot the feature space with the 2 first components and label each point by if it is a mutant or not
-    plt.figure(figsize=(10, 10))
+    """plt.figure(figsize=(10, 10))
     plt.scatter(X_features_PCA[:, 0], X_features_PCA[:, 1], c=y, cmap='viridis', alpha=0.5)
     plt.title('Feature space with PCA')
     plt.xlabel('PCA 1')
     plt.ylabel('PCA 2')
     plt.colorbar(ticks=[0, 1], label='Label') 
     plt.clim(-0.5, 1.5)
-    plt.show()
+    plt.show()"""
     
     # 3D Plot
-    fig = plt.figure(figsize=(12, 10))
+    """fig = plt.figure(figsize=(12, 10))
     ax = fig.add_subplot(111, projection='3d')
     sc = ax.scatter(
         X_features_PCA[:, 0],
@@ -108,9 +105,9 @@ def test_model_accuracy(model_types):
     ax.set_ylabel('PCA 2')
     ax.set_zlabel('PCA 3')
     plt.tight_layout()
-    plt.show()
+    plt.show()"""
 
-    X_features = X_features_PCA
+    #X_features = X_features_PCA
     
     # ---------- Feature Selection ----------
     number_features_before = X_features.shape[1]
@@ -121,9 +118,10 @@ def test_model_accuracy(model_types):
     X_features_selection = scaler.fit_transform(X_features_selection)
     
     # Here we choose the top k features 
-    X_features, selector = select_features(X_features_selection, y, k=10, method='kbest', verbose_features_selected=False) 
-    
+    X_features, selector = select_features(X_features_selection, y, k=k_test, method='lasso', verbose_features_selected=False) 
+
     number_features_after = X_features.shape[1]
+    
     
     # ---------- Test all models and generate a comprehensive report ----------
     # Define all scalers to test
@@ -137,9 +135,9 @@ def test_model_accuracy(model_types):
         'QuantileTransformer': QuantileTransformer()
     }
 
-    """scalers = {
-        'NoScaler': FunctionTransformer(func=None)
-    }"""
+    scalers = {
+        'Normalizer': Normalizer()
+    }
 
     # Results will be a nested dictionary: scaler_name -> model_type -> accuracy
     all_results = {}
@@ -159,6 +157,11 @@ def test_model_accuracy(model_types):
         else:
             X_scaled = scaler.fit_transform(X_features)
         
+        # save features to a xlsx file
+        df = pd.DataFrame(X_scaled)
+        # save to xlsx file in excel directory
+        df.to_excel('excel/features_crible.xlsx', index=False)
+    
         # Store results for this scaler
         scaler_results = {}
         
@@ -227,14 +230,16 @@ def test_model_accuracy(model_types):
     })
 
     # Plot heatmap
-    plt.figure(figsize=(12, 8))
+    """plt.figure(figsize=(12, 8))
     sns.heatmap(results_df.T * 100, annot=True, fmt='.2f', cmap='viridis', 
                 xticklabels=results_df.index, yticklabels=results_df.columns)
     plt.title('Model Accuracy (%) for Different Scaling Methods')
     plt.ylabel('Scaling Method')
     plt.xlabel('Model Type')
     plt.tight_layout()
-    plt.show()
+    plt.show()"""
+    
+    return best_acc
     
        
 def test_pipeline():
@@ -289,7 +294,35 @@ def crible_genetique():
     # le modèle s'améliorer en fonction des réponses de l'utilisateur
     
     
-    # ---------- Load dataset ----------
+    # load dataset from excel file
+    data = pd.read_excel('excel/features_crible.xlsx')
+    # Convert to numpy arrays
+    X_features = data.values
+    y = np.empty(109, dtype=object)
+    y[:56] = 'Mutant'
+    y[56:] = 'Wild-Type'
+        
+    # Create masks for Mutant and Wild-Type samples
+    mutant_mask = y == 'Mutant'
+    wild_type_mask = y == 'Wild-Type'
+
+    # Get all mutant and wild-type samples
+    mutant_samples = X_features[mutant_mask]
+    wild_type_samples = X_features[wild_type_mask]
+
+    # Select 1 random mutant sample
+    random_mutant_index = np.random.choice(len(mutant_samples), 1)[0]
+    selected_mutant = mutant_samples[random_mutant_index:random_mutant_index+1]
+
+    # Create new dataset with 1 random mutant and all wild-type samples
+    X_new = np.vstack([selected_mutant, wild_type_samples])
+    y_new = np.array(['Mutant'] + ['Wild-Type'] * len(wild_type_samples))
+
+    # Shuffle the new dataset
+    X_features, y = shuffle(X_new, y_new)
+    
+   
+    """# ---------- Load dataset ----------
     # load dataset : à créer
     data = create_dataset(reimport_images=True, test_random_mutant=True, test_random_wildtype=False, data_augmentation=False)
     
@@ -300,19 +333,18 @@ def crible_genetique():
     
     X_copy = X.copy()
     
-    # ---------- Preprocessing ----------
-    #filename_pkl_dataset = 'dataset_2025-03-11_10-07-49'
-    X_preprocessed, intensity, derivative_intensity, maxima, mask = get_preprocess_images(method=2, recompute=True, X=X_copy) #, pkl_name=filename_pkl_dataset)
+    filename_pkl_dataset = 'dataset_2025-04-16_11-42-01_preprocessing_1'
+    X_preprocessed, intensity, derivative_intensity, maxima, mask, G, median_width, Measure_diff_slice, Measure_diff_points_segment = get_preprocess_images(method=2, recompute=True, X=X_copy) 
     
     # ---------- Compute features ----------
-    X_features, features = get_feature_vector(X_preprocessed, y, X_copy, maxima, mask, intensity, recompute=True)
-    
+    X_features, features = get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)    
+
     # ---------- Feature Selection ----------
     scaler = StandardScaler()
     X_features = scaler.fit_transform(X_features)
     
     # compute the features to keep
-    X_features, selector = select_features(X_features, y, k=10, method='mRMR', verbose_features_selected=False) 
+    X_features, selector = select_features(X_features, y, k=12, method='kbest', verbose_features_selected=False) """
     
     # get indice of features to keep in 'models/selected_features.txt' file
     """with open('models/selected_features.txt', 'r') as f:
@@ -323,17 +355,31 @@ def crible_genetique():
     # ---------- Probabilities ----------
     # load model from disk
     clf = joblib.load('models/model.pkl')
+    
+    # Detect indice of elements in X_feat which contain only 0s
+    #indices = np.where(np.all(X_features == 0, axis=1))[0]
+    indices = []
+    
     # compute probabilities
     # X_proba is a probability list of each image to be a mutant and an index list of the images
-    X_proba = np.zeros((len(X), 2))
-    for i in range(len(X)):            
-        proba = clf.predict_proba(X_features[i].reshape(1, -1)) # proba[0] = proba of being a wild-type, proba[1] = proba of being a mutant
-        X_proba[i][0] = proba[0][1]
-        X_proba[i][1] = i
+    X_proba = np.zeros((len(X_features), 2))
+    for i in range(len(X_features)):   
+        if i in indices: # detect roll worm
+            X_proba[i][0] = 1
+            X_proba[i][1] = i # store the index of the image
+        else:      
+            #print(clf.classes_)
+            proba = clf.predict_proba(X_features[i].reshape(1, -1))[0] # proba[1] = proba of being a wild-type, proba[0] = proba of being a mutant
+            X_proba[i][0] = proba[0]
+            X_proba[i][1] = i # store the index of the image
   
             
     # sort the images by probability
     X_proba = X_proba[X_proba[:,0].argsort()[::-1]] # sort by descending order and keep the original index
+    
+    # print the probabilities
+    """for i in range(len(X_proba)):
+        print(f"Image {i+1}/{len(X_proba)}: {X_proba[i][0]} - {X_proba[i][1]}")"""
     
     # Show images in order of probability and ask the user if it is a mutant or not
     # the user's answers are stored in a list
@@ -343,7 +389,7 @@ def crible_genetique():
     user_answers = []
     not_seen = True
     i = 0
-    while i < len(X) and not_seen:
+    while i < len(X_features) and not_seen:
         
         # show the image
         # ask the user if it is a mutant or not
@@ -353,7 +399,7 @@ def crible_genetique():
         index = int(X_proba[i][1])
         
         # Display image and ask user if it is a mutant
-        """print(f"Image {i+1}/{len(X)}")
+        """print(f"Image {i+1}/{len(X_features)}")
         print(f"Is this image a mutant ?")
         display_image(X[index], index, 'Is this image a mutant ?')
         answer = input("y/n") 
@@ -369,15 +415,14 @@ def crible_genetique():
         # if it is a mutant, the loop stops
         
         if y[index] == 'Mutant':
-            print("Mutant found")
+            print(f"Mutant found in {i+1} images. Probability: {X_proba[i][0]}")
             not_seen = False
-        else:
-            print(f"Mutant not found. Image {i+1}/{len(X)}")
+        #else:
+            #print(f"Mutant not found. Image {i+1}/{len(X_features)}")
         
         i += 1
         
-    print(f"Mutant found in {i} images")
-    
+    #print(f"Mutant found in {i} images")
     
     return i
     # ---------- Model improvement ----------
@@ -387,9 +432,27 @@ def crible_genetique():
 if __name__ == "__main__":
         
     # ---------- Test model accuracy ----------
-    model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp', 'siamese_network']
-    model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'decision_tree', 'mlp']
-    test_model_accuracy(model_types)
+    model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'mlp', 'siamese_network']
+    model_types = ['mlp']
+    """best_acc = []
+    for i in range(40,51):
+        print(f"Testing with {i} features")
+        best_acc.append(test_model_accuracy(model_types, i))
+    
+    # save the best accuracy to a txt file
+    with open('best_accuracy.txt', 'w') as f:
+        for i in range(len(best_acc)):
+            f.write(f"{i} {best_acc[i]}\n")
+            
+    
+    # plot the best accuracy
+    plt.plot(range(40,51), best_acc)
+    plt.xlabel('Number of features')
+    plt.ylabel('Best accuracy')
+    plt.title('Best accuracy vs Number of features')
+    plt.show()"""
+    
+    #test_model_accuracy(model_types)
     
     
     # ---------- Test pipeline ----------
@@ -397,7 +460,7 @@ if __name__ == "__main__":
     
     
     # ---------- Test crible genetique ----------
-    """number_images_seen = []
+    number_images_seen = []
     for i in range(20):
         number_images_seen.append(crible_genetique())
     
@@ -418,7 +481,7 @@ if __name__ == "__main__":
     plt.show()
     
     # show the number of images seen
-    print(number_images_seen)"""
+    print(number_images_seen)
     
     
     

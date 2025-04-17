@@ -1,19 +1,19 @@
+import joblib
+import seaborn as sns
 import numpy as np
-from sklearn.model_selection import train_test_split, learning_curve
+from numpy.random import RandomState
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split, learning_curve, GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neural_network import MLPClassifier
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-from numpy.random import RandomState
-import matplotlib.pyplot as plt
-import seaborn as sns
-import joblib
 
 from utils import *
 
@@ -334,7 +334,7 @@ def train_model_epoch(X_features, y, verbose_plot=False, model_type='random_fore
     print(f"Final accuracy: {mean_correct_estim:.4f}")
     return mean_correct_estim
 
-def train_model(X_features, y, verbose_plot=False, model_type='random_forest', n_runs=10, test_size=0.3, random_state=26):
+def train_model(X_features, y, verbose_plot=False, model_type='random_forest', n_runs=10, test_size=0.3, random_state=26, verbose_print=False):
     """
     Train a model on the feature vectors with support for multiple classifier types.
     Also plots the learning curve when verbose_plot is True.
@@ -355,7 +355,7 @@ def train_model(X_features, y, verbose_plot=False, model_type='random_forest', n
         'knn': (KNeighborsClassifier, {'n_neighbors': 5}),
         'decision_tree': (DecisionTreeClassifier, {'random_state': seed}),
         'mlp': (MLPClassifier, {'hidden_layer_sizes': (100, 50), 'max_iter': 300, 'random_state': seed}),
-        'random_forest': (RandomForestClassifier, {'n_estimators': 10, 'random_state': seed}),
+        'random_forest': (RandomForestClassifier, {'n_estimators': 20, 'random_state': seed}),
     }
     if model_type not in model_configs:
         raise ValueError(f"Invalid model_type: {model_type}. Options are: {', '.join(model_configs.keys())}")
@@ -381,8 +381,9 @@ def train_model(X_features, y, verbose_plot=False, model_type='random_forest', n
         seed = RandomState(43)
         
         # Print progress
-        if (run + 1) % 5 == 0 or run == 0:
-            print(f"Completed {run + 1}/{n_runs} runs. Current mean accuracy: {np.mean(correct_estimations):.4f}")
+        if verbose_print:
+            if (run + 1) % 5 == 0 or run == 0:
+                print(f"Completed {run + 1}/{n_runs} runs. Current mean accuracy: {np.mean(correct_estimations):.4f}")
         
         if verbose_plot and run == n_runs - 1:
             # Plot Confusion Matrix
@@ -434,6 +435,7 @@ def train_model(X_features, y, verbose_plot=False, model_type='random_forest', n
     
     # Final accuracy
     mean_correct_estim = np.mean(correct_estimations)
-    print(f"Final mean accuracy: {mean_correct_estim:.4f}")
+    if verbose_print:
+        print(f"Final mean accuracy: {mean_correct_estim:.4f}")
     return mean_correct_estim
 

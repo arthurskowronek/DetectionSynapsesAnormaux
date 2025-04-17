@@ -1275,7 +1275,7 @@ def select_features(X, y, k=10, method='mRMR', verbose_features_selected=False, 
         # method 1 : F-Statistic
         #mrmr_selector = MRMR(method="FCQ", max_features=8, regression=False)
         # method 2 : Random forest
-        mrmr_selector = MRMR(method="RFCQ",max_features=None, scoring="roc_auc",param_grid = {"n_estimators": [5, 30, 100], "max_depth":[1,2,3]},cv=3,regression=False, random_state=42)
+        mrmr_selector = MRMR(method="RFCQ",max_features=None, scoring="roc_auc",param_grid = {"n_estimators": [5, 15, 30], "max_depth":[1,2,3,4]},cv=3,regression=False, random_state=42)
         # method 3 : Mutual information
         #mrmr_selector = MRMR(method="MIQ", max_features=11, regression=False) 
         
@@ -1284,10 +1284,11 @@ def select_features(X, y, k=10, method='mRMR', verbose_features_selected=False, 
 
         
         # plot the relevance
-        pd.Series(mrmr_selector.relevance_, index=mrmr_selector.variables_).sort_values(
-            ascending=False).plot.bar(figsize=(15, 6))
-        plt.title("Relevance")
-        plt.show()
+        if verbose_features_selected:
+            pd.Series(mrmr_selector.relevance_, index=mrmr_selector.variables_).sort_values(
+                ascending=False).plot.bar(figsize=(15, 6))
+            plt.title("Relevance")
+            plt.show()
         
         # transform the data to keep only the selected features 
         X_df = mrmr_selector.transform(X_df) 
