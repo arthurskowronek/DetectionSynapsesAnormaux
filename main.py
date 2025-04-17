@@ -169,7 +169,8 @@ def test_model_accuracy(model_types, k_test=12):
         for model_type in model_types:
             print(f"\n{'-'*50}")
             print(f"Evaluating {model_type} with {scaler_name}...")
-            mean_corr_estim = train_model(X_scaled, y, verbose_plot=False, model_type=model_type, n_runs=100)
+            mean_corr_estim = train_model(X_scaled, y, verbose_plot=True, model_type=model_type)
+            #best_model_optimized, best_params, mean_corr_estim = optimize_hyperparameters(X_scaled, y, model_type=model_type, method='grid')
             scaler_results[model_type] = mean_corr_estim
             print(f"Accuracy: {mean_corr_estim*100:.2f}%")
             print(f"{'-'*50}\n")
@@ -230,14 +231,14 @@ def test_model_accuracy(model_types, k_test=12):
     })
 
     # Plot heatmap
-    """plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(12, 8))
     sns.heatmap(results_df.T * 100, annot=True, fmt='.2f', cmap='viridis', 
                 xticklabels=results_df.index, yticklabels=results_df.columns)
     plt.title('Model Accuracy (%) for Different Scaling Methods')
     plt.ylabel('Scaling Method')
     plt.xlabel('Model Type')
     plt.tight_layout()
-    plt.show()"""
+    plt.show()
     
     return best_acc
     
@@ -354,7 +355,8 @@ def crible_genetique():
     
     # ---------- Probabilities ----------
     # load model from disk
-    clf = joblib.load('models/model.pkl')
+    #clf = joblib.load('models/model.pkl')
+    clf = joblib.load('models/svm_rbf_optimized.pkl')
     
     # Detect indice of elements in X_feat which contain only 0s
     #indices = np.where(np.all(X_features == 0, axis=1))[0]
@@ -452,7 +454,7 @@ if __name__ == "__main__":
     plt.title('Best accuracy vs Number of features')
     plt.show()"""
     
-    #test_model_accuracy(model_types)
+    test_model_accuracy(model_types)
     
     
     # ---------- Test pipeline ----------
@@ -460,9 +462,17 @@ if __name__ == "__main__":
     
     
     # ---------- Test crible genetique ----------
-    number_images_seen = []
+    """number_images_seen = []
     for i in range(20):
         number_images_seen.append(crible_genetique())
+        
+    # save the number of images seen to a xlsx file
+    df = pd.DataFrame(number_images_seen)
+    # save to xlsx file in excel directory
+    if not os.path.exists('excel'):
+        os.makedirs('excel')
+    # save to excel file
+    df.to_excel('excel/number_images_seen.xlsx', index=False)
     
     print(f"Average number of images seen: {np.mean(number_images_seen)}")
     
@@ -481,8 +491,7 @@ if __name__ == "__main__":
     plt.show()
     
     # show the number of images seen
-    print(number_images_seen)
-    
+    print(number_images_seen)"""
     
     
     

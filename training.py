@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import train_test_split, learning_curve, GridSearchCV, RandomizedSearchCV
-from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.model_selection import train_test_split, learning_curve, GridSearchCV, RandomizedSearchCV, cross_val_score, StratifiedKFold, cross_val_predict
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay, classification_report
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
@@ -334,108 +334,279 @@ def train_model_epoch(X_features, y, verbose_plot=False, model_type='random_fore
     print(f"Final accuracy: {mean_correct_estim:.4f}")
     return mean_correct_estim
 
-def train_model(X_features, y, verbose_plot=False, model_type='random_forest', n_runs=10, test_size=0.3, random_state=26, verbose_print=False):
+def optimize_hyperparameters(X_features, y, model_type='random_forest', method='grid', n_iter=20, cv=5):
     """
-    Train a model on the feature vectors with support for multiple classifier types.
-    Also plots the learning curve when verbose_plot is True.
+    Optimize hyperparameters for the selected model type using either grid search or random search.
+    
+    Parameters:
+    -----------
+    X_features : array-like
+        Feature vectors
+    y : array-like
+        Target labels
+    model_type : str
+        Type of model to optimize ('random_forest', 'svm_rbf', 'knn', etc.)
+    method : str
+        Optimization method ('grid' or 'random')
+    n_iter : int
+        Number of parameter settings sampled in random search
+    cv : int
+        Number of cross-validation folds
+    
+    Returns:
+    --------
+    best_model : estimator
+        Trained model with optimized hyperparameters
+    best_params : dict
+        Best hyperparameters found
+    best_score : float
+        Score of the best model
     """
-    print(f"Training {model_type} model...")
-    # Convert to numpy arrays if necessary
+    # Convert to numpy arrays if needed
     X_features = np.array(X_features)
     y = np.array(y)
-    # Encode labels numerically
-    unique_labels = np.unique(y)
-    label_map = {label: i for i, label in enumerate(unique_labels)}
-    y_numeric = np.array([label_map[label] for label in y])
-    correct_estimations = []
-    seed = RandomState(random_state) if isinstance(random_state, int) else random_state
-    model_configs = {
-        'hist_gradient_boosting': (HistGradientBoostingClassifier, {'max_iter': 100, 'random_state': seed}),
-        'svm_rbf': (SVC, {'kernel': 'rbf', 'probability': True, 'random_state': seed}),
-        'knn': (KNeighborsClassifier, {'n_neighbors': 5}),
-        'decision_tree': (DecisionTreeClassifier, {'random_state': seed}),
-        'mlp': (MLPClassifier, {'hidden_layer_sizes': (100, 50), 'max_iter': 300, 'random_state': seed}),
-        'random_forest': (RandomForestClassifier, {'n_estimators': 20, 'random_state': seed}),
+    
+    # Encode labels numerically if they're not already
+    if not np.issubdtype(y.dtype, np.number):
+        unique_labels = np.unique(y)
+        label_map = {label: i for i, label in enumerate(unique_labels)}
+        y = np.array([label_map[label] for label in y])
+    
+    # Define parameter grids for each model type
+    param_grids = {
+        'random_forest': {
+            'n_estimators': [10, 50, 100, 200],
+            'max_depth': [None, 10, 20, 30],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4, 8],
+            'bootstrap': [True, False]
+        },
+        'hist_gradient_boosting': {
+            'max_iter': [50, 100, 200],
+            'learning_rate': [0.01, 0.1, 0.2],
+            'max_depth': [None, 5, 10, 20],
+            'min_samples_leaf': [1, 5, 20]
+        },
+        'svm_rbf': {
+            'C': [5, 10, 15, 20],  
+            'gamma': [0.05, 0.1, 0.15],
+            'class_weight': [None, 'balanced']
+        },
+        'knn': {
+            'n_neighbors': [3, 5, 7, 9, 11],
+            'weights': ['uniform', 'distance'],
+            'p': [1, 2]  # p=1 is Manhattan, p=2 is Euclidean
+        },
+        'decision_tree': {
+            'max_depth': [None, 10, 20, 30],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'criterion': ['gini', 'entropy', 'log_loss']
+        },
+        'mlp': {
+            'hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 50)],
+            'activation': ['relu', 'tanh'],
+            'alpha': [0.0001, 0.001, 0.01],
+            'learning_rate': ['constant', 'adaptive']
+        }
     }
-    if model_type not in model_configs:
-        raise ValueError(f"Invalid model_type: {model_type}. Options are: {', '.join(model_configs.keys())}")
     
-    # Initialize classifier once
-    clf_class, clf_params = model_configs[model_type]
-    clf = clf_class(**clf_params)
+    # Initialize the base model
+    base_models = {
+        'random_forest': RandomForestClassifier(random_state=42),
+        'hist_gradient_boosting': HistGradientBoostingClassifier(random_state=42),
+        'svm_rbf': SVC(kernel='rbf', probability=True, random_state=42),
+        'knn': KNeighborsClassifier(),
+        'decision_tree': DecisionTreeClassifier(random_state=42),
+        'mlp': MLPClassifier(max_iter=300, random_state=42)
+    }
     
-    for run in range(n_runs):
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_features, y_numeric, test_size=test_size, random_state=seed
+    if model_type not in base_models:
+        raise ValueError(f"Invalid model_type: {model_type}. Options are: {', '.join(base_models.keys())}")
+    
+    base_model = base_models[model_type]
+    param_grid = param_grids[model_type]
+    
+    # Set up the search
+    if method == 'grid':
+        search = GridSearchCV(
+            estimator=base_model,
+            param_grid=param_grid,
+            scoring='accuracy',
+            cv=cv,
+            n_jobs=-1,
+            verbose=1
         )
-        
-        # Train Model
-        clf.fit(X_train, y_train)
-        
-        # Evaluate Model
-        y_pred = clf.predict(X_test)
-        accuracy = accuracy_score(y_test, y_pred)
-        correct_estimations.append(accuracy)
-        
-        # Update seed for next iteration
-        seed = RandomState(43)
-        
-        # Print progress
-        if verbose_print:
-            if (run + 1) % 5 == 0 or run == 0:
-                print(f"Completed {run + 1}/{n_runs} runs. Current mean accuracy: {np.mean(correct_estimations):.4f}")
-        
-        if verbose_plot and run == n_runs - 1:
-            # Plot Confusion Matrix
-            cm = confusion_matrix(y_test, y_pred)
-            fig, axes = plt.subplots(1, 2, figsize=(15, 6))
-            
-            # Confusion Matrix Plot
-            disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=unique_labels)
-            disp.plot(cmap='Blues', ax=axes[0])
-            axes[0].set_title("Confusion Matrix")
-            
-            # Learning Curve Plot
-            train_sizes = np.linspace(0.1, 1.0, 10)
-            train_sizes, train_scores, test_scores = learning_curve(
-                clf, X_features, y_numeric, 
-                train_sizes=train_sizes, 
-                cv=5, 
-                scoring='accuracy',
-                n_jobs=-1,
-                random_state=random_state
-            )
-            
-            # Calculate mean and standard deviation for training scores
-            train_mean = np.mean(train_scores, axis=1)
-            train_std = np.std(train_scores, axis=1)
-            
-            # Calculate mean and standard deviation for test scores
-            test_mean = np.mean(test_scores, axis=1)
-            test_std = np.std(test_scores, axis=1)
-            
-            # Plot learning curve
-            axes[1].fill_between(train_sizes, train_mean - train_std, 
-                                train_mean + train_std, alpha=0.1, color="blue")
-            axes[1].fill_between(train_sizes, test_mean - test_std,
-                                test_mean + test_std, alpha=0.1, color="orange")
-            axes[1].plot(train_sizes, train_mean, 'o-', color="blue", label="Training score")
-            axes[1].plot(train_sizes, test_mean, 'o-', color="orange", label="Cross-validation score")
-            axes[1].set_title("Learning Curve")
-            axes[1].set_xlabel("Training examples")
-            axes[1].set_ylabel("Accuracy")
-            axes[1].legend(loc="best")
-            axes[1].grid(True)
-            
-            plt.tight_layout()
-            plt.show()
-
-    # Save model
-    joblib.dump(clf, 'models/model.pkl')
+    elif method == 'random':
+        search = RandomizedSearchCV(
+            estimator=base_model,
+            param_distributions=param_grid,
+            n_iter=n_iter,
+            scoring='accuracy',
+            cv=cv,
+            n_jobs=-1,
+            random_state=42,
+            verbose=1
+        )
+    else:
+        raise ValueError("method should be either 'grid' or 'random'")
     
-    # Final accuracy
-    mean_correct_estim = np.mean(correct_estimations)
-    if verbose_print:
-        print(f"Final mean accuracy: {mean_correct_estim:.4f}")
-    return mean_correct_estim
+    # Perform the search
+    print(f"Optimizing {model_type} with {method} search...")
+    search.fit(X_features, y)
+    
+    # Get the best model and parameters
+    best_model = search.best_estimator_
+    best_params = search.best_params_
+    best_score = search.best_score_
+    
+    print(f"Best parameters: {best_params}")
+    print(f"Best cross-validation score: {best_score:.4f}")
+    
+    # Save the best model
+    joblib.dump(best_model, f'models/{model_type}_optimized.pkl')
+    
+    return best_model, best_params, best_score
 
+def train_model(X_features, y, model_type='random_forest', cv=5, verbose_plot=False, verbose_print=False, random_state=26):
+    print(f"Training {model_type} model with cross-validation...")
+
+    X_features = np.array(X_features)
+    y = np.array(y)
+
+    if not np.issubdtype(y.dtype, np.number):
+        unique_labels = np.unique(y)
+        label_map = {label: i for i, label in enumerate(unique_labels)}
+        y = np.array([label_map[label] for label in y])
+    else:
+        unique_labels = np.unique(y)
+
+    clf_configs = {
+        'random_forest': RandomForestClassifier(n_estimators=100, random_state=random_state),
+        'hist_gradient_boosting': HistGradientBoostingClassifier(max_iter=100, random_state=random_state),
+        'svm_rbf': SVC(kernel='rbf', probability=True, random_state=random_state, C=10, gamma=0.1, class_weight='balanced'),
+        'knn': KNeighborsClassifier(n_neighbors=5),
+        'decision_tree': DecisionTreeClassifier(random_state=random_state),
+        'mlp': MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=300, random_state=random_state)
+    }
+
+    if model_type not in clf_configs:
+        raise ValueError(f"Invalid model_type: {model_type}")
+
+    clf = clf_configs[model_type]
+    kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=random_state)
+
+    # Get accuracy scores
+    cv_scores = cross_val_score(clf, X_features, y, cv=kf, scoring='accuracy', n_jobs=-1)
+    print(f"Mean CV accuracy: {np.mean(cv_scores):.4f}")
+    if verbose_print:
+        print(f"Cross-validation scores: {cv_scores}")
+
+    if verbose_print:
+        print("\nClassification Report:")
+        print(classification_report(y, y_pred_cv))
+
+    # Train full model on all data
+    clf.fit(X_features, y)
+    joblib.dump(clf, f'models/{model_type}_cv_trained.pkl')
+
+    if verbose_plot:
+        # 1. Generate CV predictions for Confusion Matrix
+        y_pred_cv = cross_val_predict(clf, X_features, y, cv=kf, n_jobs=-1)
+        cm = confusion_matrix(y, y_pred_cv)
+
+        # 2. Learning Curve
+        train_sizes, train_scores, test_scores = learning_curve(
+            clf, X_features, y, cv=kf, scoring='accuracy', n_jobs=-1
+        )
+        train_mean = np.mean(train_scores, axis=1)
+        train_std = np.std(train_scores, axis=1)
+        test_mean = np.mean(test_scores, axis=1)
+        test_std = np.std(test_scores, axis=1)
+
+        # 3. Create subplots
+        fig, axs = plt.subplots(1, 2, figsize=(16, 6))
+
+        # 4. Plot Confusion Matrix
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+        disp.plot(ax=axs[0], cmap='Blues', colorbar=False)
+        axs[0].set_title(f"Confusion Matrix ({model_type})")
+
+        # 5. Plot Learning Curve
+        axs[1].fill_between(train_sizes, train_mean - train_std, train_mean + train_std, alpha=0.1, color="blue")
+        axs[1].fill_between(train_sizes, test_mean - test_std, test_mean + test_std, alpha=0.1, color="orange")
+        axs[1].plot(train_sizes, train_mean, 'o-', color="blue", label="Training score")
+        axs[1].plot(train_sizes, test_mean, 'o-', color="orange", label="Cross-validation score")
+        axs[1].set_title("Learning Curve")
+        axs[1].set_xlabel("Training Examples")
+        axs[1].set_ylabel("Accuracy")
+        axs[1].legend(loc="best")
+        axs[1].grid(True)
+
+        # 6. Show combined plot
+        plt.tight_layout()
+        plt.show()
+
+    return np.mean(cv_scores)
+
+    print(f"Training {model_type} model with cross-validation...")
+
+    X_features = np.array(X_features)
+    y = np.array(y)
+
+    if not np.issubdtype(y.dtype, np.number):
+        unique_labels = np.unique(y)
+        label_map = {label: i for i, label in enumerate(unique_labels)}
+        y = np.array([label_map[label] for label in y])
+    else:
+        unique_labels = np.unique(y)
+
+    clf_configs = {
+        'random_forest': RandomForestClassifier(n_estimators=100, random_state=random_state),
+        'hist_gradient_boosting': HistGradientBoostingClassifier(max_iter=100, random_state=random_state),
+        'svm_rbf': SVC(kernel='rbf', probability=True, random_state=random_state, C=10, gamma=0.1, class_weight='balanced'),
+        'knn': KNeighborsClassifier(n_neighbors=5),
+        'decision_tree': DecisionTreeClassifier(random_state=random_state),
+        'mlp': MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=300, random_state=random_state)
+    }
+
+    if model_type not in clf_configs:
+        raise ValueError(f"Invalid model_type: {model_type}")
+
+    clf = clf_configs[model_type]
+
+    # Cross-validation accuracy
+    kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=random_state)
+    cv_scores = cross_val_score(clf, X_features, y, cv=kf, scoring='accuracy', n_jobs=-1)
+
+    if verbose_print:
+        print(f"Cross-validation scores: {cv_scores}")
+    print(f"Mean CV accuracy: {np.mean(cv_scores):.4f}")
+
+    clf.fit(X_features, y)
+    joblib.dump(clf, f'models/{model_type}_cv_trained.pkl')
+
+    if verbose_plot:
+        train_sizes, train_scores, test_scores = learning_curve(
+            clf, X_features, y, cv=kf, scoring='accuracy', n_jobs=-1
+        )
+        train_mean = np.mean(train_scores, axis=1)
+        train_std = np.std(train_scores, axis=1)
+        test_mean = np.mean(test_scores, axis=1)
+        test_std = np.std(test_scores, axis=1)
+
+        plt.figure(figsize=(10, 6))
+        plt.fill_between(train_sizes, train_mean - train_std, train_mean + train_std, alpha=0.1, color="blue")
+        plt.fill_between(train_sizes, test_mean - test_std, test_mean + test_std, alpha=0.1, color="orange")
+        plt.plot(train_sizes, train_mean, 'o-', color="blue", label="Training score")
+        plt.plot(train_sizes, test_mean, 'o-', color="orange", label="Cross-validation score")
+        plt.title("Learning Curve")
+        plt.xlabel("Training Examples")
+        plt.ylabel("Accuracy")
+        plt.legend(loc="best")
+        plt.grid(True)
+        plt.show()
+        
+        
+
+    return np.mean(cv_scores)
