@@ -548,20 +548,9 @@ def train_model(X_features, y, model_type='random_forest', cv=5, verbose_plot=Fa
         plt.tight_layout()
         plt.show()
         
-    # get indices of the images which were missclassified
-    indices_errors = []
-    for i in range(len(y)):
-        if y[i] != y_pred_cv[i]:
-            indices_errors.append(i)
-    print(f"Number of misclassified images: {len(indices_errors)} of {len(y)}")
-    for i in range(len(y)):
-        print(y[i], y_pred_cv[i])
     
-    print(f"Indices of misclassified images: {indices_errors}")
         
-        
-
-    return np.mean(cv_scores), indices_errors
+    return np.mean(cv_scores)
 
 
 

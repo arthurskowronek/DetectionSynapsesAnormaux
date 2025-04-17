@@ -46,7 +46,7 @@ def show_dataset_properties(data):
     print('------------------------------------------')
     print('')
 
-def create_dataset(reimport_images=False, test_random_mutant = False, test_random_wildtype = False, data_augmentation = True, pkl_name=DEFAULT_PKL_NAME):
+def create_dataset(reimport_images=False, test_random_mutant = False, test_random_wildtype = False, data_augmentation = True, ERROR=False, pkl_name=DEFAULT_PKL_NAME):
     """
     Create a dataset from images in directory "data" and save it as a pkl file.
     
@@ -129,6 +129,19 @@ def create_dataset(reimport_images=False, test_random_mutant = False, test_rando
                 counter = count_wildtype
                 count_wildtype = copy_and_rename_files(subdir_path, target_dir, prefix, counter)
                 if data_augmentation: count_wildtype = process_data_augmentation(subdir_path, target_dir, prefix, count_wildtype)
+                
+            elif subdir_name.startswith('error') and ERROR:
+                # remove images from MUTANT_DIR and WT_DIR
+                for file in MUTANT_DIR.glob('*.tif'):
+                    file.unlink()
+                for file in WT_DIR.glob('*.tif'):
+                    file.unlink() 
+                    
+                target_dir = MUTANT_DIR
+                prefix = "Err"
+                counter = count_mutant
+                count_mutant = copy_and_rename_files(subdir_path, target_dir, prefix, counter)
+                
         
         print(f"Images imported. Mutant files: {count_mutant}, WildType files: {count_wildtype}")
         

@@ -6,6 +6,7 @@ from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler, Ma
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.utils import shuffle
+from PIL import Image
 
 def test_model_accuracy(model_types, k_test=12):
     # ---------- Load dataset ----------
@@ -170,7 +171,7 @@ def test_model_accuracy(model_types, k_test=12):
         for model_type in model_types:
             print(f"\n{'-'*50}")
             print(f"Evaluating {model_type} with {scaler_name}...")
-            mean_corr_estim, indices_errors = train_model(X_scaled, y, verbose_plot=True, verbose_print=True, model_type=model_type)
+            mean_corr_estim = train_model(X_scaled, y, verbose_plot=True, verbose_print=True, model_type=model_type)
             #best_model_optimized, best_params, mean_corr_estim = optimize_hyperparameters(X_scaled, y, model_type=model_type, method='grid')
             scaler_results[model_type] = mean_corr_estim
             print(f"Accuracy: {mean_corr_estim*100:.2f}%")
@@ -242,21 +243,59 @@ def test_model_accuracy(model_types, k_test=12):
     plt.show()
     
     
+    return best_acc
+  
+  
+def display_errors():
+    # ---------- Load dataset ----------
+    filename_pkl_dataset = 'dataset_2025-04-16_11-42-01'
+    data = create_dataset(reimport_images=False, pkl_name=filename_pkl_dataset + '.pkl')
+    X = np.array(data['data'])
+    # load features from xlsx file
+    df = pd.read_excel('excel/features.xlsx')
+    X_features_excel = df.values
+    # Detect indice of elements in X_feat which contain only 0s
+    indices = np.where(np.all(X_features_excel == 0, axis=1))[0]
+    # Remove these elements from X_feat and y
+    X = np.delete(X, indices, axis=0)
+    
+    print(f"Length of X: {len(X)}")
+    
+    
+    # ---------- Load model ----------
+    clf = joblib.load('models/svm_rbf_optimized.pkl')
+    
+    X_features = pd.read_excel('excel/features_crible.xlsx').values
+    y = np.empty(109, dtype=object)
+    y[:56] = 0 # mutants are the first 56 images
+    y[56:] = 1 # wild-types are the last 53 images
+    
+    y_predict = clf.predict(X_features)
+    
+    indices_errors = np.where(y_predict != y)[0]
+    print(f"Number of errors: {len(indices_errors)}")
+    
+    # create directory 'errors' in 'data' if it doesn't exist in 'data' directory
+    if not os.path.exists('data/errors'):
+        os.makedirs('data/errors')
+    
+    
     # plot images which were missclassified (indices_errors)
     for i in range(len(indices_errors)):
         index = indices_errors[i]
         # Display image
         real_classification = y[index]
         if real_classification == 0:
-            title = 'Classify as a mutant but it is a wild-type'
+            title = 'Classify as a wild-type but it is a mutant'
         else:
-            title = 'Classify as wild-type but it is a mutant'
-            
+            title = 'Classify as mutant but it is a wild-type'
         display_image(X[index], index, title)
-    
-    
-    return best_acc
-    
+        # create a copy of images which were missclassified and put this copy in 'errors' directory
+        image = X[index]
+        image = Image.fromarray(image) # convert to PIL image
+        # save image in 'errors' directory
+        image.save(f'data/errors/image_{index}.tif')
+                
        
 def test_pipeline():
     # ---------- Load dataset ----------
@@ -337,7 +376,7 @@ def crible_genetique():
     # Shuffle the new dataset
     X_features, y = shuffle(X_new, y_new)
     
-   
+
     """# ---------- Load dataset ----------
     # load dataset : à créer
     data = create_dataset(reimport_images=True, test_random_mutant=True, test_random_wildtype=False, data_augmentation=False)
@@ -347,6 +386,11 @@ def crible_genetique():
     X = np.array(data['data'])
     y = np.array(data['label'])
     
+    # Convert labels to numeric
+    unique_labels = np.unique(y)
+    label_map = {label: i for i, label in enumerate(unique_labels)}
+    y = np.array([label_map[label] for label in y])
+    
     X_copy = X.copy()
     
     filename_pkl_dataset = 'dataset_2025-04-16_11-42-01_preprocessing_1'
@@ -355,13 +399,24 @@ def crible_genetique():
     # ---------- Compute features ----------
     X_features, features = get_feature_vector(G, median_width, Measure_diff_slice, Measure_diff_points_segment, X_preprocessed, y, X, maxima, mask, intensity, recompute=True)    
 
+    print(f"Number of features before 0s : {X_features.shape[1]}")
+
+    # Detect features with all 0s
+    indices = np.where(np.all(X_features == 0, axis=0))[0]
+    # Remove these features from X_feat
+    X_features = np.delete(X_features, indices, axis=1)
+
+
+    print(f"Number of features before selection : {X_features.shape[1]}")
     # ---------- Feature Selection ----------
     scaler = StandardScaler()
     X_features = scaler.fit_transform(X_features)
     
     # compute the features to keep
-    X_features, selector = select_features(X_features, y, k=12, method='kbest', verbose_features_selected=False) """
+    X_features, selector = select_features(X_features, y, k=12, method='lasso', verbose_features_selected=False) 
     
+    print(f"Number of features after selection : {X_features.shape[1]}")"""
+
     # get indice of features to keep in 'models/selected_features.txt' file
     """with open('models/selected_features.txt', 'r') as f:
         selected_features = f.read().splitlines()
@@ -430,6 +485,7 @@ def crible_genetique():
         
         # check if the image is a mutant
         # if it is a mutant, the loop stops
+        print(f"Image {i+1}/{len(X_features)} : {X_proba[i][0]} - {y[index]}")
         
         if y[index] == 'Mutant':
             print(f"Mutant found in {i+1} images. Probability: {X_proba[i][0]}")
@@ -447,6 +503,9 @@ def crible_genetique():
     
 
 if __name__ == "__main__":
+        
+        
+    #display_errors()
         
     # ---------- Test model accuracy ----------
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'mlp', 'siamese_network']
@@ -469,7 +528,7 @@ if __name__ == "__main__":
     plt.title('Best accuracy vs Number of features')
     plt.show()"""
     
-    test_model_accuracy(model_types)
+    #test_model_accuracy(model_types)
     
     
     # ---------- Test pipeline ----------
