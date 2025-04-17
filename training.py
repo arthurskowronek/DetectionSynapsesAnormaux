@@ -375,21 +375,21 @@ def optimize_hyperparameters(X_features, y, model_type='random_forest', method='
     # Define parameter grids for each model type
     param_grids = {
         'random_forest': {
-            'n_estimators': [10, 50, 100, 200],
-            'max_depth': [None, 10, 20, 30],
-            'min_samples_split': [2, 5, 10],
-            'min_samples_leaf': [1, 2, 4, 8],
+            'n_estimators': [10, 30, 50, 80],
+            'max_depth': [5, 10, 15],
+            'min_samples_split': [5, 10, 15],
+            'min_samples_leaf': [2, 4, 8, 12],
             'bootstrap': [True, False]
         },
         'hist_gradient_boosting': {
-            'max_iter': [50, 100, 200],
-            'learning_rate': [0.01, 0.1, 0.2],
-            'max_depth': [None, 5, 10, 20],
-            'min_samples_leaf': [1, 5, 20]
+            'max_iter': [30, 60, 100, 150],
+            'learning_rate': [0.01, 0.05, 0.1],
+            'max_depth': [3, 5, 8],
+            'min_samples_leaf': [2, 5, 10]
         },
         'svm_rbf': {
-            'C': [5, 10, 15, 20],  
-            'gamma': [0.05, 0.1, 0.15],
+            'C': [6, 7, 8, 9, 10, 11, 12, 13, 14],  
+            'gamma': [0.08, 0.09, 0.1, 0.11, 0.12],
             'class_weight': [None, 'balanced']
         },
         'knn': {
@@ -404,7 +404,7 @@ def optimize_hyperparameters(X_features, y, model_type='random_forest', method='
             'criterion': ['gini', 'entropy', 'log_loss']
         },
         'mlp': {
-            'hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 50)],
+            'hidden_layer_sizes': [(10,), (20,), (30,), (30, 15)],
             'activation': ['relu', 'tanh'],
             'alpha': [0.0001, 0.001, 0.01],
             'learning_rate': ['constant', 'adaptive']
@@ -480,15 +480,14 @@ def train_model(X_features, y, model_type='random_forest', cv=5, verbose_plot=Fa
         y = np.array([label_map[label] for label in y])
     else:
         unique_labels = np.unique(y)
-
     clf_configs = {
-        'random_forest': RandomForestClassifier(n_estimators=100, random_state=random_state),
-        'hist_gradient_boosting': HistGradientBoostingClassifier(max_iter=100, random_state=random_state),
-        'svm_rbf': SVC(kernel='rbf', probability=True, random_state=random_state, C=10, gamma=0.1, class_weight='balanced'),
-        'knn': KNeighborsClassifier(n_neighbors=5),
+        'random_forest': RandomForestClassifier(n_estimators=80, random_state=random_state, min_samples_split=5, min_samples_leaf=2, max_depth=5, bootstrap=True),
+        'hist_gradient_boosting': HistGradientBoostingClassifier(max_iter=150, learning_rate=0.1, max_depth=5, min_samples_leaf=2, random_state=random_state),
+        'svm_rbf': SVC(kernel='rbf', probability=True, random_state=random_state, C=8, gamma=0.12, class_weight='balanced'),
+        'knn': KNeighborsClassifier(n_neighbors=7, p=1, weights='uniform'),
         'decision_tree': DecisionTreeClassifier(random_state=random_state),
-        'mlp': MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=300, random_state=random_state)
-    }
+        'mlp': MLPClassifier(hidden_layer_sizes=(30,), max_iter=30000, random_state=random_state, activation='relu', alpha=0.01, learning_rate='adaptive', solver='lbfgs')
+    } 
 
     if model_type not in clf_configs:
         raise ValueError(f"Invalid model_type: {model_type}")
@@ -502,14 +501,16 @@ def train_model(X_features, y, model_type='random_forest', cv=5, verbose_plot=Fa
     if verbose_print:
         print(f"Cross-validation scores: {cv_scores}")
 
-    if verbose_print:
-        print("\nClassification Report:")
-        print(classification_report(y, y_pred_cv))
-
     # Train full model on all data
     clf.fit(X_features, y)
     joblib.dump(clf, f'models/{model_type}_cv_trained.pkl')
 
+
+    if verbose_print:
+        y_pred_cv = cross_val_predict(clf, X_features, y, cv=kf, n_jobs=-1)
+        print("\nClassification Report:")
+        print(classification_report(y, y_pred_cv))
+        
     if verbose_plot:
         # 1. Generate CV predictions for Confusion Matrix
         y_pred_cv = cross_val_predict(clf, X_features, y, cv=kf, n_jobs=-1)
@@ -546,8 +547,24 @@ def train_model(X_features, y, model_type='random_forest', cv=5, verbose_plot=Fa
         # 6. Show combined plot
         plt.tight_layout()
         plt.show()
+        
+    # get indices of the images which were missclassified
+    indices_errors = []
+    for i in range(len(y)):
+        if y[i] != y_pred_cv[i]:
+            indices_errors.append(i)
+    print(f"Number of misclassified images: {len(indices_errors)} of {len(y)}")
+    for i in range(len(y)):
+        print(y[i], y_pred_cv[i])
+    
+    print(f"Indices of misclassified images: {indices_errors}")
+        
+        
 
-    return np.mean(cv_scores)
+    return np.mean(cv_scores), indices_errors
+
+
+
 
     print(f"Training {model_type} model with cross-validation...")
 

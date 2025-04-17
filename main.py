@@ -121,7 +121,7 @@ def test_model_accuracy(model_types, k_test=12):
     X_features, selector = select_features(X_features_selection, y, k=k_test, method='lasso', verbose_features_selected=False) 
 
     number_features_after = X_features.shape[1]
-    
+
     
     # ---------- Test all models and generate a comprehensive report ----------
     # Define all scalers to test
@@ -137,6 +137,7 @@ def test_model_accuracy(model_types, k_test=12):
 
     scalers = {
         'Normalizer': Normalizer()
+        #'NoScaler': FunctionTransformer(func=None)
     }
 
     # Results will be a nested dictionary: scaler_name -> model_type -> accuracy
@@ -169,7 +170,7 @@ def test_model_accuracy(model_types, k_test=12):
         for model_type in model_types:
             print(f"\n{'-'*50}")
             print(f"Evaluating {model_type} with {scaler_name}...")
-            mean_corr_estim = train_model(X_scaled, y, verbose_plot=True, model_type=model_type)
+            mean_corr_estim, indices_errors = train_model(X_scaled, y, verbose_plot=True, verbose_print=True, model_type=model_type)
             #best_model_optimized, best_params, mean_corr_estim = optimize_hyperparameters(X_scaled, y, model_type=model_type, method='grid')
             scaler_results[model_type] = mean_corr_estim
             print(f"Accuracy: {mean_corr_estim*100:.2f}%")
@@ -239,6 +240,20 @@ def test_model_accuracy(model_types, k_test=12):
     plt.xlabel('Model Type')
     plt.tight_layout()
     plt.show()
+    
+    
+    # plot images which were missclassified (indices_errors)
+    for i in range(len(indices_errors)):
+        index = indices_errors[i]
+        # Display image
+        real_classification = y[index]
+        if real_classification == 0:
+            title = 'Classify as a mutant but it is a wild-type'
+        else:
+            title = 'Classify as wild-type but it is a mutant'
+            
+        display_image(X[index], index, title)
+    
     
     return best_acc
     
@@ -435,7 +450,7 @@ if __name__ == "__main__":
         
     # ---------- Test model accuracy ----------
     model_types = ['hist_gradient_boosting', 'svm_rbf', 'random_forest', 'knn', 'mlp', 'siamese_network']
-    model_types = ['mlp']
+    model_types = ['svm_rbf']
     """best_acc = []
     for i in range(40,51):
         print(f"Testing with {i} features")
